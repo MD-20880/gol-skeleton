@@ -1,6 +1,9 @@
 package gol
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+)
 
 type distributorChannels struct {
 	events     chan<- Event
@@ -21,10 +24,12 @@ func distributor(p Params, c distributorChannels) {
 		world[i] = make([]byte, p.ImageWidth)
 	}
 
+	//Pass File name to IO part
 	file := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
 	c.ioCommand <- ioInput
 	c.ioFilename <- file
 
+	//Receive image from IO Part
 	for i := range world {
 		for j := range world[i] {
 			world[i][j] = <-c.ioInput
@@ -34,22 +39,41 @@ func distributor(p Params, c distributorChannels) {
 	turn := 0
 
 	// TODO: Execute all turns of the Game of Life.
+	chans := make([]chan [][]byte, p.Threads)
+	for i := range chans {
+		chans[i] = make(chan [][]byte)
+	}
+	//Run GOL implementation for TURN times.
 	for turn = p.Turns; turn > 0; turn-- {
-		world = startWorker(p, world)
+		var newWorld [][]byte
+		for i := range chans {
+			go startWorker(p, world, i*(p.ImageHeight/p.Threads), 0, (i+1)*(p.ImageHeight/p.Threads), p.ImageWidth, chans[i])
+		}
+
+		for i := range chans {
+			tempStore := <-chans[i]
+			newWorld = append(newWorld, tempStore...)
+		}
+		world = newWorld
 	}
 
+	// Get all Alive cells.
+	aliveCells := calculateAliveCells(p, world)
+	fmt.Println(aliveCells)
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 	c.events <- FinalTurnComplete{
 		CompletedTurns: turn,
-		Alive:          calculateAliveCells(p, world),
+		Alive:          aliveCells,
 	}
 
 	// Make sure that the Io has finished any output before exiting.
+	fmt.Printf("checking idle\n")
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
 	c.events <- StateChange{turn, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+	fmt.Printf("closing\n")
 	close(c.events)
 }
