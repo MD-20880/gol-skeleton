@@ -16,6 +16,39 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
+func reportCount(c distributorChannels, p Params, turn *int, world *[][]byte, mutex sync.Mutex) {
+	for {
+		time.Sleep(2 * time.Second)
+		mutex.Lock()
+		result := calculateAliveCells(p, *world)
+		mutex.Unlock()
+		if c.events != nil {
+			c.events <- AliveCellsCount{
+				CompletedTurns: p.Turns - *turn,
+				CellsCount:     len(result),
+			}
+		} else {
+			return
+		}
+
+	}
+
+}
+
+func storePgm(mutex sync.Mutex, world *[][]byte, c distributorChannels, p Params) {
+	c.ioCommand <- ioOutput
+	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.Turns)
+	c.ioFilename <- filename
+	mutex.Lock()
+	currentWorld := *world
+	for i := range currentWorld {
+		for j := range currentWorld[i] {
+			c.ioOutput <- currentWorld[i][j]
+		}
+	}
+	mutex.Unlock()
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 
@@ -75,7 +108,8 @@ func distributor(p Params, c distributorChannels) {
 		CompletedTurns: turn,
 		Alive:          aliveCells,
 	}
-
+	fmt.Println("Start writing")
+	storePgm(mutex, &world, c, p)
 	// Make sure that the Io has finished any output before exiting.
 	fmt.Printf("checking idle\n")
 	c.ioCommand <- ioCheckIdle
@@ -86,18 +120,4 @@ func distributor(p Params, c distributorChannels) {
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	fmt.Printf("closing\n")
 	close(c.events)
-}
-
-func reportCount(c distributorChannels, p Params, turn *int, world *[][]byte, mutex sync.Mutex) {
-	for {
-		time.Sleep(2 * time.Second)
-		mutex.Lock()
-		result := calculateAliveCells(p, *world)
-		c.events <- AliveCellsCount{
-			CompletedTurns: p.Turns - *turn,
-			CellsCount:     len(result),
-		}
-		mutex.Unlock()
-	}
-
 }
