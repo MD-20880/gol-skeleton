@@ -46,9 +46,10 @@ func distributor(p Params, c distributorChannels) {
 	//Run GOL implementation for TURN times.
 	for turn = p.Turns; turn > 0; turn-- {
 		var newWorld [][]byte
-		for i := range chans {
-			go startWorker(p, world, i*(p.ImageHeight/p.Threads), 0, (i+1)*(p.ImageHeight/p.Threads), p.ImageWidth, chans[i])
+		for i := 0; i < p.Threads-1; i++ {
+			go startWorker(p, world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
 		}
+		go startWorker(p, world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
 
 		for i := range chans {
 			tempStore := <-chans[i]
@@ -60,6 +61,7 @@ func distributor(p Params, c distributorChannels) {
 	// Get all Alive cells.
 	aliveCells := calculateAliveCells(p, world)
 	fmt.Println(aliveCells)
+
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 	c.events <- FinalTurnComplete{
 		CompletedTurns: turn,
