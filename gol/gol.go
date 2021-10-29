@@ -8,6 +8,8 @@ type Params struct {
 	ImageHeight int
 }
 
+// Cell is used as the return type for the testing framework
+
 // Run starts the processing of Game of Life. It should initialise channels and goroutines.
 func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 
@@ -15,13 +17,16 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 
 	ioCommand := make(chan ioCommand)
 	ioIdle := make(chan bool)
+	filename := make(chan string)
+	output := make(chan byte)
+	input := make(chan byte)
 
 	ioChannels := ioChannels{
 		command:  ioCommand,
 		idle:     ioIdle,
-		filename: nil,
-		output:   nil,
-		input:    nil,
+		filename: filename,
+		output:   output,
+		input:    input,
 	}
 	go startIo(p, ioChannels)
 
@@ -29,9 +34,9 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 		events:     events,
 		ioCommand:  ioCommand,
 		ioIdle:     ioIdle,
-		ioFilename: nil,
-		ioOutput:   nil,
-		ioInput:    nil,
+		ioFilename: filename,
+		ioOutput:   output,
+		ioInput:    input,
 	}
 	distributor(p, distributorChannels)
 }

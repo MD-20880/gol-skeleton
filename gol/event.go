@@ -44,8 +44,8 @@ type StateChange struct { // implements Event
 	NewState       State
 }
 
-// CellFlipped is an Event notifying the GUI about a change of state of a single cell.
-// This even should be sent every time a cell changes state.
+// CellFlipped is an Event notifying the GUI about a change of state of a single Cell.
+// This even should be sent every time a Cell changes state.
 // Make sure to send this event for all cells that are alive when the image is loaded in.
 type CellFlipped struct { // implements Event
 	CompletedTurns int
