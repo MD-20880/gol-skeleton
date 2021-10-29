@@ -3,6 +3,8 @@ package gol
 import (
 	"fmt"
 	"strconv"
+	"sync"
+	"time"
 )
 
 type distributorChannels struct {
@@ -16,6 +18,8 @@ type distributorChannels struct {
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
+
+	mutex := sync.Mutex{}
 
 	// TODO: Create a 2D slice to store the world.
 
@@ -43,6 +47,10 @@ func distributor(p Params, c distributorChannels) {
 	for i := range chans {
 		chans[i] = make(chan [][]byte)
 	}
+
+	//Task 3
+	go reportCount(c, p, &turn, &world, mutex)
+
 	//Run GOL implementation for TURN times.
 	for turn = p.Turns; turn > 0; turn-- {
 		var newWorld [][]byte
@@ -55,14 +63,14 @@ func distributor(p Params, c distributorChannels) {
 			tempStore := <-chans[i]
 			newWorld = append(newWorld, tempStore...)
 		}
+		mutex.Lock()
 		world = newWorld
+		mutex.Unlock()
 	}
 
+	// TODO: Report the final state using FinalTurnCompleteEvent.
 	// Get all Alive cells.
 	aliveCells := calculateAliveCells(p, world)
-	fmt.Println(aliveCells)
-
-	// TODO: Report the final state using FinalTurnCompleteEvent.
 	c.events <- FinalTurnComplete{
 		CompletedTurns: turn,
 		Alive:          aliveCells,
@@ -78,4 +86,18 @@ func distributor(p Params, c distributorChannels) {
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	fmt.Printf("closing\n")
 	close(c.events)
+}
+
+func reportCount(c distributorChannels, p Params, turn *int, world *[][]byte, mutex sync.Mutex) {
+	for {
+		time.Sleep(2 * time.Second)
+		mutex.Lock()
+		result := calculateAliveCells(p, *world)
+		c.events <- AliveCellsCount{
+			CompletedTurns: p.Turns - *turn,
+			CellsCount:     len(result),
+		}
+		mutex.Unlock()
+	}
+
 }
