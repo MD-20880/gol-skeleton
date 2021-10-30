@@ -38,5 +38,14 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 		ioOutput:   output,
 		ioInput:    input,
 	}
-	distributor(p, distributorChannels)
+
+	channelStatus := channelAvailibility{
+		events:     true,
+		ioCommand:  true,
+		ioIdle:     true,
+		ioFilename: true,
+		ioOutput:   true,
+		ioInput:    true,
+	}
+	distributor(p, distributorChannels, &channelStatus)
 }

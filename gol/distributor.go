@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type distributorChannels struct {
@@ -16,21 +17,72 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func reportCount(c distributorChannels, p Params, turn *int, world *[][]byte, mutex sync.Mutex) {
+type channelAvailibility struct {
+	events     bool
+	ioCommand  bool
+	ioIdle     bool
+	ioFilename bool
+	ioOutput   bool
+	ioInput    bool
+}
+
+func inLoopEventHandler(c distributorChannels, p Params, turn *int, currentWorld *[][]byte, mutex *sync.Mutex, a *channelAvailibility) {
+	var result []util.Cell
+	world := *currentWorld
+	//Count report Event
+	go reportCount(c, p, turn, &result, mutex, a)
+	for {
+		mutex.Lock()
+		result = calculateAliveCells(p, world)
+		flipList := make([]util.Cell, 0)
+		//check every block
+		cellIndex := 0
+		for i := range world {
+			for j := range world[i] {
+				if cellIndex >= len(result) {
+					break
+				}
+				//if It was alive, then check whether it is alive
+				if world[i][j] == 255 {
+					//I assume everything will be in order here
+					if result[cellIndex].X == i && result[cellIndex].Y == j {
+						continue
+					} else {
+						flipList = append(flipList, util.Cell{
+							X: i,
+							Y: j,
+						})
+						cellIndex++
+					}
+				}
+			}
+		}
+		for info := range flipList {
+			c.events <- CellFlipped{
+				CompletedTurns: *turn,
+				Cell:           flipList[info],
+			}
+		}
+
+		c.events <- TurnComplete{CompletedTurns: *turn}
+		mutex.Unlock()
+
+	}
+}
+
+func reportCount(c distributorChannels, p Params, turn *int, result *[]util.Cell, mutex *sync.Mutex, a *channelAvailibility) {
 	for {
 		time.Sleep(2 * time.Second)
-		mutex.Lock()
-		result := calculateAliveCells(p, *world)
-		mutex.Unlock()
-		if c.events != nil {
+		if a.events == true {
+			mutex.Lock()
 			c.events <- AliveCellsCount{
 				CompletedTurns: p.Turns - *turn,
-				CellsCount:     len(result),
+				CellsCount:     len(*result),
 			}
+			mutex.Unlock()
 		} else {
 			return
 		}
-
 	}
 
 }
@@ -50,7 +102,7 @@ func storePgm(mutex sync.Mutex, world *[][]byte, c distributorChannels, p Params
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels) {
+func distributor(p Params, c distributorChannels, a *channelAvailibility) {
 
 	mutex := sync.Mutex{}
 
@@ -82,7 +134,7 @@ func distributor(p Params, c distributorChannels) {
 	}
 
 	//Task 3
-	go reportCount(c, p, &turn, &world, mutex)
+	//go inLoopEventHandler(c, p, &turn, &world, &mutex,a)
 
 	//Run GOL implementation for TURN times.
 	for turn = p.Turns; turn > 0; turn-- {
@@ -96,6 +148,8 @@ func distributor(p Params, c distributorChannels) {
 			tempStore := <-chans[i]
 			newWorld = append(newWorld, tempStore...)
 		}
+		//cell Flipped event
+
 		mutex.Lock()
 		world = newWorld
 		mutex.Unlock()
@@ -119,5 +173,6 @@ func distributor(p Params, c distributorChannels) {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	fmt.Printf("closing\n")
+	a.events = false
 	close(c.events)
 }
