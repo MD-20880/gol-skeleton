@@ -37,19 +37,19 @@ var semaPhore semaphore.Semaphore
 
 func reportCount() {
 	for {
-		result := calculateAliveCells(p, world)
 		time.Sleep(2 * time.Second)
+		mutex.Lock()
+		result := CalculateAliveCells(p, world)
 		if a.events == true {
-			semaPhore.Wait()
 			c.events <- AliveCellsCount{
 				CompletedTurns: p.Turns - turn,
 				CellsCount:     len(result),
 			}
-			semaPhore.Post()
 		} else {
 			return
 		}
 	}
+	mutex.Unlock()
 
 }
 
@@ -71,9 +71,9 @@ func storePgm() {
 func updateTurn(chans []chan [][]byte) [][]byte {
 	var newWorld [][]byte
 	for i := 0; i < p.Threads-1; i++ {
-		go startWorker(p, world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
+		go StartWorker(p, world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
 	}
-	go startWorker(p, world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
+	go StartWorker(p, world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
 
 	for i := range chans {
 		tempStore := <-chans[i]
@@ -102,8 +102,8 @@ func cellEqual(a util.Cell, b util.Cell) bool {
 
 //TODO : I just want to remind you that this function sucks.
 func checkFlipCells(oldWorld *[][]byte, newWorld *[][]byte, p Params) []util.Cell {
-	oldCells := calculateAliveCells(p, *oldWorld)
-	newCells := calculateAliveCells(p, *newWorld)
+	oldCells := CalculateAliveCells(p, *oldWorld)
+	newCells := CalculateAliveCells(p, *newWorld)
 	flipCells := make([]util.Cell, 0)
 	i := 0
 	j := 0
@@ -136,7 +136,7 @@ func newCheckFlipCells(oldWorldP *[][]byte, newWorldP *[][]byte) []util.Cell {
 	for i := range oldWorld {
 		for j := range oldWorld[i] {
 			if oldWorld[i][j] != newWorld[i][j] {
-				flipCells = append(flipCells, util.Cell{X: j, Y: i})
+				flipCells = append(flipCells, util.Cell{X: i, Y: j})
 			}
 		}
 	}
@@ -167,7 +167,7 @@ func checkKeyPressed(keyPressed <-chan rune) {
 }
 
 func quit() {
-	aliveCells := calculateAliveCells(p, world)
+	aliveCells := CalculateAliveCells(p, world)
 	c.events <- FinalTurnComplete{
 		CompletedTurns: turn,
 		Alive:          aliveCells,
@@ -217,10 +217,18 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	for i := range chans {
 		chans[i] = make(chan [][]byte)
 	}
-
 	//Task 3
 	go reportCount()
 	go checkKeyPressed(keyPressed)
+	for i := range world {
+		for j := range world[i] {
+			if world[i][j] == 255 {
+				c.events <- CellFlipped{turn, util.Cell{i, j}}
+			}
+		}
+	}
+	c.events <- TurnComplete{CompletedTurns: turn}
+
 	//Run GOL implementation for TURN times.
 	for turn = p.Turns; turn > 0; turn-- {
 		semaPhore.Wait()

@@ -26,7 +26,7 @@ func calculateNextState(p Params, world [][]byte, startX int, startY int, endX i
 	resultChan <- newWorld
 }
 
-func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+func CalculateAliveCells(p Params, world [][]byte) []util.Cell {
 	var cells = []util.Cell{}
 	for j, _ := range world {
 		for i, num := range world[j] {
@@ -80,6 +80,10 @@ func calculateHelper(x int, y int, oldWorld *[][]byte, xmap [3]int, ymap [3]int,
 	}
 }
 
-func startWorker(p Params, world [][]byte, startX int, startY int, endX int, endY int, resultChan chan [][]byte) {
+func StartWorker(p Params, world [][]byte, startX int, startY int, endX int, endY int, resultChan chan [][]byte) {
 	calculateNextState(p, world, startX, startY, endX, endY, resultChan)
+}
+
+func main() {
+
 }
