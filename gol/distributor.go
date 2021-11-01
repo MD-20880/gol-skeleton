@@ -1,6 +1,8 @@
 package gol
 
 import (
+	"fmt"
+	"github.com/ChrisGora/semaphore"
 	"strconv"
 	"sync"
 	"time"
@@ -25,17 +27,25 @@ type channelAvailibility struct {
 	ioInput    bool
 }
 
-func reportCount(c distributorChannels, p Params, turn *int, world *[][]byte, mutex *sync.Mutex, a *channelAvailibility) {
+var p Params
+var world [][]byte
+var mutex sync.Mutex
+var a channelAvailibility
+var c distributorChannels
+var turn int
+var semaPhore semaphore.Semaphore
+
+func reportCount() {
 	for {
-		result := calculateAliveCells(p, *world)
+		result := calculateAliveCells(p, world)
 		time.Sleep(2 * time.Second)
 		if a.events == true {
-			mutex.Lock()
+			semaPhore.Wait()
 			c.events <- AliveCellsCount{
-				CompletedTurns: p.Turns - *turn,
+				CompletedTurns: p.Turns - turn,
 				CellsCount:     len(result),
 			}
-			mutex.Unlock()
+			semaPhore.Post()
 		} else {
 			return
 		}
@@ -44,12 +54,12 @@ func reportCount(c distributorChannels, p Params, turn *int, world *[][]byte, mu
 }
 
 //This function Work just well
-func storePgm(mutex sync.Mutex, world *[][]byte, c distributorChannels, p Params) {
+func storePgm() {
 	c.ioCommand <- ioOutput
-	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.Turns)
+	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.Turns-turn)
 	c.ioFilename <- filename
 	mutex.Lock()
-	currentWorld := *world
+	currentWorld := world
 	for i := range currentWorld {
 		for j := range currentWorld[i] {
 			c.ioOutput <- currentWorld[i][j]
@@ -58,12 +68,12 @@ func storePgm(mutex sync.Mutex, world *[][]byte, c distributorChannels, p Params
 	mutex.Unlock()
 }
 
-func updateTurn(p Params, c distributorChannels, chans []chan [][]byte, world *[][]byte) [][]byte {
+func updateTurn(chans []chan [][]byte) [][]byte {
 	var newWorld [][]byte
 	for i := 0; i < p.Threads-1; i++ {
-		go startWorker(p, *world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
+		go startWorker(p, world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
 	}
-	go startWorker(p, *world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
+	go startWorker(p, world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
 
 	for i := range chans {
 		tempStore := <-chans[i]
@@ -133,14 +143,57 @@ func newCheckFlipCells(oldWorldP *[][]byte, newWorldP *[][]byte) []util.Cell {
 	return flipCells
 }
 
-// distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels, a *channelAvailibility) {
+func checkKeyPressed(keyPressed <-chan rune) {
+	for {
+		i := <-keyPressed
+		semaPhore.Wait()
+		switch i {
+		case 's':
+			storePgm()
+		case 'p':
+			{
+				key := <-keyPressed
+				for key != 'p' {
+					key = <-keyPressed
+				}
+				fmt.Printf("Continuing\n")
+			}
+		case 'q':
+			quit()
+		}
+		semaPhore.Post()
 
-	mutex := sync.Mutex{}
+	}
+}
+
+func quit() {
+	aliveCells := calculateAliveCells(p, world)
+	c.events <- FinalTurnComplete{
+		CompletedTurns: turn,
+		Alive:          aliveCells,
+	}
+	storePgm()
+	// Make sure that the Io has finished any output before exiting.
+	c.ioCommand <- ioCheckIdle
+	<-c.ioIdle
+
+	c.events <- StateChange{turn, Quitting}
+
+	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+	a.events = false
+	close(c.events)
+}
+
+// distributor divides the work between workers and interacts with other goroutines.
+func distributor(params Params, channels distributorChannels, avail *channelAvailibility, keyPressed <-chan rune) {
+	p = params
+	c = channels
+	a = *avail
+	semaPhore = semaphore.Init(1, 1)
+	mutex = sync.Mutex{}
 
 	// TODO: Create a 2D slice to store the world.
-
-	world := make([][]byte, p.ImageHeight)
+	world = make([][]byte, p.ImageHeight)
 	for i := range world {
 		world[i] = make([]byte, p.ImageWidth)
 	}
@@ -157,7 +210,7 @@ func distributor(p Params, c distributorChannels, a *channelAvailibility) {
 		}
 	}
 
-	turn := 0
+	turn = 0
 
 	// TODO: Execute all turns of the Game of Life.
 	chans := make([]chan [][]byte, p.Threads)
@@ -166,11 +219,12 @@ func distributor(p Params, c distributorChannels, a *channelAvailibility) {
 	}
 
 	//Task 3
-	go reportCount(c, p, &turn, &world, &mutex, a)
-
+	go reportCount()
+	go checkKeyPressed(keyPressed)
 	//Run GOL implementation for TURN times.
 	for turn = p.Turns; turn > 0; turn-- {
-		newWorld := updateTurn(p, c, chans, &world)
+		semaPhore.Wait()
+		newWorld := updateTurn(chans)
 		//stupid function
 		//flipCells := checkFlipCells(&world,&newWorld,p)
 		//smart one
@@ -183,23 +237,9 @@ func distributor(p Params, c distributorChannels, a *channelAvailibility) {
 		mutex.Lock()
 		world = newWorld
 		mutex.Unlock()
+		semaPhore.Post()
 	}
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
-	// Get all Alive cells.
-	aliveCells := calculateAliveCells(p, world)
-	c.events <- FinalTurnComplete{
-		CompletedTurns: turn,
-		Alive:          aliveCells,
-	}
-	storePgm(mutex, &world, c, p)
-	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
-
-	c.events <- StateChange{turn, Quitting}
-
-	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	a.events = false
-	close(c.events)
+	quit()
 }

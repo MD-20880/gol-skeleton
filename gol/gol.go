@@ -49,6 +49,6 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 		ioOutput:   true,
 		ioInput:    true,
 	}
-	distributor(p, distributorChannels, &channelStatus)
+	distributor(p, distributorChannels, &channelStatus, keyPresses)
 	fmt.Printf("running Here")
 }
