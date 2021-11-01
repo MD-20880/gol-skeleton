@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -26,58 +25,15 @@ type channelAvailibility struct {
 	ioInput    bool
 }
 
-func inLoopEventHandler(c distributorChannels, p Params, turn *int, currentWorld *[][]byte, mutex *sync.Mutex, a *channelAvailibility) {
-	var result []util.Cell
-	world := *currentWorld
-	//Count report Event
-	go reportCount(c, p, turn, &result, mutex, a)
+func reportCount(c distributorChannels, p Params, turn *int, world *[][]byte, mutex *sync.Mutex, a *channelAvailibility) {
 	for {
-		mutex.Lock()
-		result = calculateAliveCells(p, world)
-		flipList := make([]util.Cell, 0)
-		//check every block
-		cellIndex := 0
-		for i := range world {
-			for j := range world[i] {
-				if cellIndex >= len(result) {
-					break
-				}
-				//if It was alive, then check whether it is alive
-				if world[i][j] == 255 {
-					//I assume everything will be in order here
-					if result[cellIndex].X == i && result[cellIndex].Y == j {
-						continue
-					} else {
-						flipList = append(flipList, util.Cell{
-							X: i,
-							Y: j,
-						})
-						cellIndex++
-					}
-				}
-			}
-		}
-		for info := range flipList {
-			c.events <- CellFlipped{
-				CompletedTurns: *turn,
-				Cell:           flipList[info],
-			}
-		}
-
-		c.events <- TurnComplete{CompletedTurns: *turn}
-		mutex.Unlock()
-
-	}
-}
-
-func reportCount(c distributorChannels, p Params, turn *int, result *[]util.Cell, mutex *sync.Mutex, a *channelAvailibility) {
-	for {
+		result := calculateAliveCells(p, *world)
 		time.Sleep(2 * time.Second)
 		if a.events == true {
 			mutex.Lock()
 			c.events <- AliveCellsCount{
 				CompletedTurns: p.Turns - *turn,
-				CellsCount:     len(*result),
+				CellsCount:     len(result),
 			}
 			mutex.Unlock()
 		} else {
@@ -87,6 +43,7 @@ func reportCount(c distributorChannels, p Params, turn *int, result *[]util.Cell
 
 }
 
+//This function Work just well
 func storePgm(mutex sync.Mutex, world *[][]byte, c distributorChannels, p Params) {
 	c.ioCommand <- ioOutput
 	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.Turns)
@@ -99,6 +56,81 @@ func storePgm(mutex sync.Mutex, world *[][]byte, c distributorChannels, p Params
 		}
 	}
 	mutex.Unlock()
+}
+
+func updateTurn(p Params, c distributorChannels, chans []chan [][]byte, world *[][]byte) [][]byte {
+	var newWorld [][]byte
+	for i := 0; i < p.Threads-1; i++ {
+		go startWorker(p, *world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
+	}
+	go startWorker(p, *world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
+
+	for i := range chans {
+		tempStore := <-chans[i]
+		newWorld = append(newWorld, tempStore...)
+	}
+
+	return newWorld
+
+}
+
+func cellsGreaterThan(a util.Cell, b util.Cell) bool {
+	if a.X > b.X {
+		return true
+	} else if a.Y > b.Y {
+		return true
+	} else {
+		return false
+	}
+}
+func cellEqual(a util.Cell, b util.Cell) bool {
+	if a.Y == b.Y && a.X == b.X {
+		return true
+	}
+	return false
+}
+
+//TODO : I just want to remind you that this function sucks.
+func checkFlipCells(oldWorld *[][]byte, newWorld *[][]byte, p Params) []util.Cell {
+	oldCells := calculateAliveCells(p, *oldWorld)
+	newCells := calculateAliveCells(p, *newWorld)
+	flipCells := make([]util.Cell, 0)
+	i := 0
+	j := 0
+	for i < len(oldCells) && j < len(newCells) {
+		if cellEqual(oldCells[i], newCells[j]) {
+			i++
+			j++
+		} else if cellsGreaterThan(oldCells[i], newCells[j]) {
+			flipCells = append(flipCells, newCells[j])
+			j++
+		} else {
+			flipCells = append(flipCells, oldCells[i])
+			i++
+		}
+	}
+	if i < len(oldCells) {
+		addCell := oldCells[i:len(oldCells)]
+		flipCells = append(flipCells, addCell...)
+	} else if j < len(newCells) {
+		addCell := newCells[j:len(newCells)]
+		flipCells = append(flipCells, addCell...)
+	}
+	return flipCells
+}
+
+func newCheckFlipCells(oldWorldP *[][]byte, newWorldP *[][]byte) []util.Cell {
+	oldWorld := *oldWorldP
+	newWorld := *newWorldP
+	flipCells := make([]util.Cell, 0)
+	for i := range oldWorld {
+		for j := range oldWorld[i] {
+			if oldWorld[i][j] != newWorld[i][j] {
+				flipCells = append(flipCells, util.Cell{X: j, Y: i})
+			}
+		}
+	}
+	return flipCells
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -134,22 +166,20 @@ func distributor(p Params, c distributorChannels, a *channelAvailibility) {
 	}
 
 	//Task 3
-	//go inLoopEventHandler(c, p, &turn, &world, &mutex,a)
+	go reportCount(c, p, &turn, &world, &mutex, a)
 
 	//Run GOL implementation for TURN times.
 	for turn = p.Turns; turn > 0; turn-- {
-		var newWorld [][]byte
-		for i := 0; i < p.Threads-1; i++ {
-			go startWorker(p, world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
+		newWorld := updateTurn(p, c, chans, &world)
+		//stupid function
+		//flipCells := checkFlipCells(&world,&newWorld,p)
+		//smart one
+		flipCells := newCheckFlipCells(&world, &newWorld)
+		for i := range flipCells {
+			c.events <- CellFlipped{turn, flipCells[i]}
 		}
-		go startWorker(p, world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
-
-		for i := range chans {
-			tempStore := <-chans[i]
-			newWorld = append(newWorld, tempStore...)
-		}
+		c.events <- TurnComplete{CompletedTurns: turn}
 		//cell Flipped event
-
 		mutex.Lock()
 		world = newWorld
 		mutex.Unlock()
@@ -162,17 +192,14 @@ func distributor(p Params, c distributorChannels, a *channelAvailibility) {
 		CompletedTurns: turn,
 		Alive:          aliveCells,
 	}
-	fmt.Println("Start writing")
 	storePgm(mutex, &world, c, p)
 	// Make sure that the Io has finished any output before exiting.
-	fmt.Printf("checking idle\n")
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
 	c.events <- StateChange{turn, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	fmt.Printf("closing\n")
 	a.events = false
 	close(c.events)
 }
