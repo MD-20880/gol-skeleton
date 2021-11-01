@@ -3,6 +3,7 @@ package gol
 import (
 	"fmt"
 	"github.com/ChrisGora/semaphore"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -29,7 +30,8 @@ type channelAvailibility struct {
 
 var p Params
 var world [][]byte
-var mutex sync.Mutex
+var newWorld [][]byte
+var mutex = sync.Mutex{}
 var a channelAvailibility
 var c distributorChannels
 var turn int
@@ -40,32 +42,31 @@ func reportCount() {
 		time.Sleep(2 * time.Second)
 		mutex.Lock()
 		result := CalculateAliveCells(p, world)
+		currentTurn := turn
+		mutex.Unlock()
 		if a.events == true {
 			c.events <- AliveCellsCount{
-				CompletedTurns: p.Turns - turn,
+				CompletedTurns: currentTurn,
 				CellsCount:     len(result),
 			}
+
 		} else {
 			return
 		}
 	}
-	mutex.Unlock()
 
 }
 
 //This function Work just well
 func storePgm() {
 	c.ioCommand <- ioOutput
-	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.Turns-turn)
+	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- filename
-	mutex.Lock()
-	currentWorld := world
-	for i := range currentWorld {
-		for j := range currentWorld[i] {
-			c.ioOutput <- currentWorld[i][j]
+	for i := range world {
+		for j := range world[i] {
+			c.ioOutput <- world[i][j]
 		}
 	}
-	mutex.Unlock()
 }
 
 func updateTurn(chans []chan [][]byte) [][]byte {
@@ -129,13 +130,12 @@ func checkFlipCells(oldWorld *[][]byte, newWorld *[][]byte, p Params) []util.Cel
 	return flipCells
 }
 
-func newCheckFlipCells(oldWorldP *[][]byte, newWorldP *[][]byte) []util.Cell {
-	oldWorld := *oldWorldP
-	newWorld := *newWorldP
+func newCheckFlipCells() []util.Cell {
+
 	flipCells := make([]util.Cell, 0)
-	for i := range oldWorld {
-		for j := range oldWorld[i] {
-			if oldWorld[i][j] != newWorld[i][j] {
+	for i := range world {
+		for j := range world[i] {
+			if world[i][j] != newWorld[i][j] {
 				flipCells = append(flipCells, util.Cell{X: i, Y: j})
 			}
 		}
@@ -160,6 +160,7 @@ func checkKeyPressed(keyPressed <-chan rune) {
 			}
 		case 'q':
 			quit()
+			os.Exit(1)
 		}
 		semaPhore.Post()
 
@@ -190,7 +191,6 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	c = channels
 	a = *avail
 	semaPhore = semaphore.Init(1, 1)
-	mutex = sync.Mutex{}
 
 	// TODO: Create a 2D slice to store the world.
 	world = make([][]byte, p.ImageHeight)
@@ -227,23 +227,26 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 			}
 		}
 	}
-	c.events <- TurnComplete{CompletedTurns: turn}
+	//c.events <- TurnComplete{CompletedTurns: turn}
+
+	//test
 
 	//Run GOL implementation for TURN times.
-	for turn = p.Turns; turn > 0; turn-- {
+	for i := 1; i <= p.Turns; i++ {
 		semaPhore.Wait()
-		newWorld := updateTurn(chans)
+		newWorld = updateTurn(chans)
 		//stupid function
 		//flipCells := checkFlipCells(&world,&newWorld,p)
 		//smart one
-		flipCells := newCheckFlipCells(&world, &newWorld)
-		for i := range flipCells {
-			c.events <- CellFlipped{turn, flipCells[i]}
+		flipCells := newCheckFlipCells()
+		for j := range flipCells {
+			c.events <- CellFlipped{turn, flipCells[j]}
 		}
 		c.events <- TurnComplete{CompletedTurns: turn}
 		//cell Flipped event
 		mutex.Lock()
 		world = newWorld
+		turn = i
 		mutex.Unlock()
 		semaPhore.Post()
 	}
