@@ -1,8 +1,19 @@
-package gol
+package main
 
 import (
-	"uk.ac.bris.cs/gameoflife/util"
+	"flag"
+	"fmt"
+	"net"
+	"net/rpc"
+	"uk.ac.bris.cs/gameoflife/stubs"
 )
+
+type Params struct {
+	Turns       int
+	Threads     int
+	ImageWidth  int
+	ImageHeight int
+}
 
 func calculateNextState(p Params, world [][]byte, startX int, startY int, endX int, endY int, resultChan chan [][]byte) {
 	x_scan_map := [3]int{-1, 0, 1}
@@ -24,18 +35,6 @@ func calculateNextState(p Params, world [][]byte, startX int, startY int, endX i
 		}
 	}
 	resultChan <- newWorld
-}
-
-func CalculateAliveCells(p Params, world [][]byte) []util.Cell {
-	var cells = []util.Cell{}
-	for j, _ := range world {
-		for i, num := range world[j] {
-			if num == 255 {
-				cells = append(cells, util.Cell{i, j})
-			}
-		}
-	}
-	return cells
 }
 
 func calculateHelper(x int, y int, oldWorld *[][]byte, xmap [3]int, ymap [3]int, p Params, c chan byte) {
@@ -84,6 +83,31 @@ func StartWorker(p Params, world [][]byte, startX int, startY int, endX int, end
 	calculateNextState(p, world, startX, startY, endX, endY, resultChan)
 }
 
+type Worker struct {
+}
+
+func (w *Worker) Calculate(request stubs.Request, response *stubs.Response) (err error) {
+	fmt.Printf("Request received\n")
+	p := Params{
+		Turns:       request.Turns,
+		Threads:     1,
+		ImageWidth:  request.ImageWidth,
+		ImageHeight: request.ImageHeight,
+	}
+	r := request
+	resultMap := make(chan [][]byte, 1)
+	StartWorker(p, r.CalculateMap, r.StartX, r.StartY, r.EndX, r.EndY, resultMap)
+	result := <-resultMap
+	response.Result = result
+	return
+}
+
 func main() {
+	pAddr := flag.String("port", "8030", "Port to listen on")
+	flag.Parse()
+	rpc.Register(&Worker{})
+	listener, _ := net.Listen("tcp", ":"+*pAddr)
+	defer listener.Close()
+	rpc.Accept(listener)
 
 }

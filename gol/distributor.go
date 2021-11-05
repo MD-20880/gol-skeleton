@@ -1,12 +1,15 @@
 package gol
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/ChrisGora/semaphore"
+	"net/rpc"
 	"os"
 	"strconv"
 	"sync"
 	"time"
+	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -36,12 +39,14 @@ var a channelAvailibility
 var c distributorChannels
 var turn int
 var semaPhore semaphore.Semaphore
+var serverList []string
+var connMap map[string]*rpc.Client
 
 func reportCount() {
 	for {
 		time.Sleep(2 * time.Second)
 		mutex.Lock()
-		result := CalculateAliveCells(p, world)
+		result := CalculateAliveCells(world)
 		currentTurn := turn
 		mutex.Unlock()
 		if a.events == true {
@@ -57,6 +62,29 @@ func reportCount() {
 
 }
 
+func readfile(path string) bufio.Scanner {
+	file, err := os.Open(path)
+	//if err != nil{
+	//	os.Exit(3)
+	//}
+	fmt.Println(err)
+	scanner := bufio.NewScanner(file)
+	return *scanner
+
+}
+
+func getServerList() {
+	connMap = map[string]*rpc.Client{}
+	serverList = make([]string, 0)
+	scanner := readfile("gol/serverList")
+	for scanner.Scan() {
+		serverList = append(serverList, scanner.Text())
+	}
+	for _, server := range serverList {
+		connMap[server], _ = rpc.Dial("tcp", server)
+	}
+}
+
 //This function Work just well
 func storePgm() {
 	c.ioCommand <- ioOutput
@@ -70,19 +98,35 @@ func storePgm() {
 }
 
 func updateTurn(chans []chan [][]byte) [][]byte {
-	var newWorld [][]byte
+	var updatedWorld [][]byte
 	for i := 0; i < p.Threads-1; i++ {
-		go StartWorker(p, world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
+		go startWorker(i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i], serverList[i%(len(serverList))])
 	}
-	go StartWorker(p, world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
+	go startWorker((p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1], serverList[0])
 
 	for i := range chans {
 		tempStore := <-chans[i]
-		newWorld = append(newWorld, tempStore...)
+		updatedWorld = append(updatedWorld, tempStore...)
 	}
 
-	return newWorld
+	return updatedWorld
 
+}
+
+func startWorker(startX int, startY int, endX int, endY int, resultchan chan [][]byte, server string) {
+	req := stubs.Request{
+		Turns:        turn,
+		ImageWidth:   p.ImageWidth,
+		ImageHeight:  p.ImageHeight,
+		StartX:       startX,
+		StartY:       startY,
+		EndX:         endX,
+		EndY:         endY,
+		CalculateMap: world,
+	}
+	rsp := new(stubs.Response)
+	connMap[server].Call(stubs.Calculate, req, rsp)
+	resultchan <- rsp.Result
 }
 
 func cellsGreaterThan(a util.Cell, b util.Cell) bool {
@@ -101,10 +145,22 @@ func cellEqual(a util.Cell, b util.Cell) bool {
 	return false
 }
 
+func CalculateAliveCells(world [][]byte) []util.Cell {
+	var cells = []util.Cell{}
+	for j, _ := range world {
+		for i, num := range world[j] {
+			if num == 255 {
+				cells = append(cells, util.Cell{i, j})
+			}
+		}
+	}
+	return cells
+}
+
 //TODO : I just want to remind you that this function sucks.
 func checkFlipCells(oldWorld *[][]byte, newWorld *[][]byte, p Params) []util.Cell {
-	oldCells := CalculateAliveCells(p, *oldWorld)
-	newCells := CalculateAliveCells(p, *newWorld)
+	oldCells := CalculateAliveCells(*oldWorld)
+	newCells := CalculateAliveCells(*newWorld)
 	flipCells := make([]util.Cell, 0)
 	i := 0
 	j := 0
@@ -168,7 +224,7 @@ func checkKeyPressed(keyPressed <-chan rune) {
 }
 
 func quit() {
-	aliveCells := CalculateAliveCells(p, world)
+	aliveCells := CalculateAliveCells(world)
 	c.events <- FinalTurnComplete{
 		CompletedTurns: turn,
 		Alive:          aliveCells,
@@ -179,6 +235,9 @@ func quit() {
 	<-c.ioIdle
 
 	c.events <- StateChange{turn, Quitting}
+	for _, j := range connMap {
+		j.Close()
+	}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	a.events = false
@@ -191,6 +250,7 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	c = channels
 	a = *avail
 	semaPhore = semaphore.Init(1, 1)
+	getServerList()
 
 	// TODO: Create a 2D slice to store the world.
 	world = make([][]byte, p.ImageHeight)
