@@ -22,6 +22,7 @@ func checkRule(p Params, world [][]byte, startY, endY, startX, endX int) [][]byt
 	for i := 0; i < height; i++ { // should be height then width so I did it wrong here
 		for j := 0; j < width; j++ {
 			count := count(world, i+startY, j, p)
+			copy := world[i][j]
 			if world[i+startY][j] == 255 && count < 2 {
 				newWorld[i][j] = 0
 			} else if world[i+startY][j] == 255 && (count == 2 || count == 3) {
@@ -30,6 +31,9 @@ func checkRule(p Params, world [][]byte, startY, endY, startX, endX int) [][]byt
 				newWorld[i][j] = 0
 			} else if world[i+startY][j] == 0 && count == 3 {
 				newWorld[i][j] = 255
+			}
+			if copy != newWorld[i][j] {
+				distributeChannels.events <- CellFlipped{turns, util.Cell{X: j, Y: i}}
 			}
 			//if world[i][j] == 255 && (count <2 || count > 3){
 			//	newWorld[i][j] = 0

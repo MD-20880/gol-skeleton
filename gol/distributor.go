@@ -1,9 +1,12 @@
 package gol
 
 import (
+	"fmt"
+	"os"
 	"strconv"
 	"sync"
 	"time"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type distributorChannels struct {
@@ -13,12 +16,14 @@ type distributorChannels struct {
 	ioFilename chan<- string
 	ioOutput   chan<- uint8
 	ioInput    <-chan uint8
+	keyPresses <-chan rune
 }
 
 var globalWorld [][]byte
 var globalP Params
 var turns int
 var mutex = &sync.Mutex{}
+var distributeChannels distributorChannels
 
 func createWorld() [][]byte {
 	world := make([][]byte, globalP.ImageHeight)
@@ -28,6 +33,41 @@ func createWorld() [][]byte {
 	return world
 }
 
+//TODO current state so how about the one is still processing need of mutex lock?
+// buggy code need to get to a lab machine to test it out
+func keyPressesAction() {
+	for {
+		switch <-distributeChannels.keyPresses {
+		case 's':
+			outputPgm()
+		case 'q':
+			outputPgm()
+			os.Exit(1) // not sure about this part also do I need to report event or not
+		case 'p':
+			fmt.Println(turns)
+			mutex.Lock()
+			if <-distributeChannels.keyPresses == 'p' {
+				fmt.Println("continuing")
+				mutex.Unlock()
+			}
+
+		}
+	}
+
+}
+
+func outputPgm() {
+	distributeChannels.ioCommand <- ioOutput
+	outputString := strconv.Itoa(globalP.ImageHeight) + "x" + strconv.Itoa(globalP.ImageWidth) + "x" + strconv.Itoa(globalP.Turns)
+	distributeChannels.ioFilename <- outputString
+	world := globalWorld
+	for i := 0; i < globalP.ImageHeight; i++ {
+		for j := 0; j < globalP.ImageWidth; j++ {
+			distributeChannels.ioOutput <- world[i][j]
+		}
+	}
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	// step 3 ticker part
@@ -35,6 +75,8 @@ func distributor(p Params, c distributorChannels) {
 	go tickers(c.events, done)
 	globalP = p
 	globalWorld = createWorld()
+	turns = 0
+	distributeChannels = c
 	turn := 0
 
 	// step 1 command and filename
@@ -45,8 +87,11 @@ func distributor(p Params, c distributorChannels) {
 	for i := range globalWorld {
 		for j := range globalWorld[i] {
 			globalWorld[i][j] = <-c.ioInput
+			c.events <- CellFlipped{CompletedTurns: turns, Cell: util.Cell{X: j, Y: i}}
 		}
 	}
+
+	go keyPressesAction()
 
 	channels := createChannels(p)
 	unitLength := p.ImageHeight / p.Threads
@@ -69,14 +114,7 @@ func distributor(p Params, c distributorChannels) {
 	event := FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, globalWorld)}
 	c.events <- event
 
-	c.ioCommand <- ioOutput
-	outputString := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.Turns)
-	c.ioFilename <- outputString
-	for i := 0; i < globalP.ImageHeight; i++ {
-		for j := 0; j < globalP.ImageWidth; j++ {
-			c.ioOutput <- globalWorld[i][j]
-		}
-	}
+	outputPgm()
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
