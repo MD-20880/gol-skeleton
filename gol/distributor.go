@@ -66,6 +66,7 @@ func outputPgm() {
 			distributeChannels.ioOutput <- world[i][j]
 		}
 	}
+	distributeChannels.events <- ImageOutputComplete{CompletedTurns: turns, Filename: outputString}
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -77,7 +78,6 @@ func distributor(p Params, c distributorChannels) {
 	globalWorld = createWorld()
 	turns = 0
 	distributeChannels = c
-	turn := 0
 
 	// step 1 command and filename
 	c.ioCommand <- ioInput
@@ -87,7 +87,9 @@ func distributor(p Params, c distributorChannels) {
 	for i := range globalWorld {
 		for j := range globalWorld[i] {
 			globalWorld[i][j] = <-c.ioInput
-			c.events <- CellFlipped{CompletedTurns: turns, Cell: util.Cell{X: j, Y: i}}
+			if globalWorld[i][j] == 255 {
+				c.events <- CellFlipped{CompletedTurns: turns, Cell: util.Cell{X: j, Y: i}}
+			}
 		}
 	}
 
@@ -106,6 +108,15 @@ func distributor(p Params, c distributorChannels) {
 		globalWorld = combine(channels, p)
 		mutex.Unlock()
 		turns++
+		//for i := range globalWorld {
+		//	for j := range globalWorld[i] {
+		//
+		//		if globalWorld[i][j] != nextWorld[i][j] {
+		//			c.events <- CellFlipped{CompletedTurns: turns, Cell: util.Cell{X: j, Y: i}}
+		//		}
+		//	}
+		//}
+		//globalWorld = nextWorld
 		c.events <- TurnComplete{CompletedTurns: turns}
 	}
 	done <- true
@@ -119,7 +130,7 @@ func distributor(p Params, c distributorChannels) {
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
-	c.events <- StateChange{turn, Quitting}
+	c.events <- StateChange{turns, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
