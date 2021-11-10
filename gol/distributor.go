@@ -1,8 +1,14 @@
 package gol
 
 import (
+	"bufio"
+	"flag"
+	"fmt"
+	"net/rpc"
+	"os"
 	"strconv"
 	"sync"
+	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
 type distributorChannels struct {
@@ -48,6 +54,19 @@ func distributor(p Params, c distributorChannels) {
 	c.ioFilename <- string
 
 	getInput(c)
+
+	// fixing rn
+	server := flag.String("server", "127.0.0.1:8030", "IP:port string to connect to as server")
+	flag.Parse()
+	fmt.Println("Server: ", *server)
+	client, _ := rpc.Dial("tcp", *server)
+	defer client.Close()
+	for {
+		request := stubs.Request{World: globalWorld}
+		response := new(stubs.Response)
+		client.Call(stubs.PremiumReverseHandler, request, response)
+		fmt.Println("Responded: " + response.Message)
+	}
 
 	for i := 0; i < p.Turns; i++ {
 		globalWorld = calculateNextState(p, globalWorld, 0, p.ImageHeight, 0, p.ImageWidth)
