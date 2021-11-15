@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/rpc"
@@ -14,6 +16,11 @@ type GolOperations struct{}
 
 func (s *GolOperations) GolWorker(req stubs.Request, res *stubs.Response) (err error) {
 	//worlds := createNewWorld(req.ImageHeight, req.ImageWidth)
+	// not sure this part is right tho
+	if req.World == nil {
+		err = errors.New("no world is given")
+		return
+	}
 	for i := 0; i < req.Turns; i++ {
 		req.World = CalculateNextState(req, 0, req.ImageHeight, 0, req.ImageWidth)
 	}
@@ -27,7 +34,8 @@ func main() {
 	flag.Parse()
 	rand.Seed(time.Now().UnixNano())
 	rpc.Register(&GolOperations{})
-	listener, _ := net.Listen("tcp", ":"+*pAddr)
+	listener, err := net.Listen("tcp", ":"+*pAddr)
+	handleError(err)
 	defer listener.Close()
 	rpc.Accept(listener)
 }
@@ -103,4 +111,10 @@ func CalculateAliveCells(request stubs.Request) []util.Cell {
 		}
 	}
 	return container
+}
+
+func handleError(err error) {
+	if err != nil {
+		fmt.Println("er shazi")
+	}
 }

@@ -38,10 +38,15 @@ func getInput(c distributorChannels) {
 	}
 }
 
+func handleError(err error) {
+	if err != nil {
+		fmt.Println("shabi ba ni")
+	}
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 
-	// TODO: Create a 2D slice to store the world.
 	globalP = p
 	globalWorld = createWorld()
 	turn := 0
@@ -56,7 +61,8 @@ func distributor(p Params, c distributorChannels) {
 	server := "127.0.0.1:8030"
 	//flag.Parse()
 	fmt.Println("Server: ", server)
-	client, _ := rpc.Dial("tcp", server)
+	client, err := rpc.Dial("tcp", server)
+	handleError(err)
 	defer client.Close()
 	response := makeCall(*client)
 
