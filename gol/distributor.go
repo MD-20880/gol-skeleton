@@ -1,16 +1,14 @@
 package gol
 
 import (
-	"bufio"
-	"flag"
 	"fmt"
 	"net/rpc"
-	"os"
 	"strconv"
-	"sync"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
+//TODO most important of all, add error handling to it
+// Would had save me tons of time
 type distributorChannels struct {
 	events     chan<- Event
 	ioCommand  chan<- ioCommand
@@ -23,7 +21,6 @@ type distributorChannels struct {
 var globalWorld [][]byte
 var globalP Params
 var turns int
-var mutex = &sync.Mutex{}
 
 func createWorld() [][]byte {
 	world := make([][]byte, globalP.ImageHeight)
@@ -56,23 +53,14 @@ func distributor(p Params, c distributorChannels) {
 	getInput(c)
 
 	// fixing rn
-	server := flag.String("server", "127.0.0.1:8030", "IP:port string to connect to as server")
-	flag.Parse()
-	fmt.Println("Server: ", *server)
-	client, _ := rpc.Dial("tcp", *server)
+	server := "127.0.0.1:8030"
+	//flag.Parse()
+	fmt.Println("Server: ", server)
+	client, _ := rpc.Dial("tcp", server)
 	defer client.Close()
-	for {
-		request := stubs.Request{World: globalWorld}
-		response := new(stubs.Response)
-		client.Call(stubs.PremiumReverseHandler, request, response)
-		fmt.Println("Responded: " + response.Message)
-	}
+	response := makeCall(*client)
 
-	for i := 0; i < p.Turns; i++ {
-		globalWorld = calculateNextState(p, globalWorld, 0, p.ImageHeight, 0, p.ImageWidth)
-	}
-
-	event := FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, globalWorld)}
+	event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: response.AliveCells}
 	c.events <- event
 
 	// Make sure that the Io has finished any output before exiting.
@@ -83,4 +71,12 @@ func distributor(p Params, c distributorChannels) {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
+}
+
+//TODO not sure if the global v would cause any troubles
+func makeCall(client rpc.Client) stubs.Response {
+	request := stubs.Request{Turns: globalP.Turns, ImageWidth: globalP.ImageWidth, ImageHeight: globalP.ImageHeight, World: globalWorld}
+	response := new(stubs.Response)
+	client.Call(stubs.GolHandler, request, response)
+	return *response
 }
