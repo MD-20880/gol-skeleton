@@ -287,6 +287,7 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 			}
 		}
 	}
+	conn, _ := rpc.Dial("tcp", "127.0.0.1:8030")
 	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	//test
@@ -294,7 +295,18 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	//Run GOL implementation for TURN times.
 	for i := 1; i <= p.Turns; i++ {
 		semaPhore.Wait()
-		newWorld = updateTurn(chans)
+
+		//newWorld = updateTurn(chans)
+		req := stubs.PublishTask{
+			GolMap:      world,
+			Turns:       1,
+			ImageWidth:  p.ImageWidth,
+			ImageHeight: p.ImageHeight,
+		}
+
+		res := new(stubs.GolResultReport)
+		conn.Call(stubs.DistributorPublish, req, res)
+		newWorld = res.ResultMap
 		//stupid function
 		//flipCells := checkFlipCells(&world,&newWorld,p)
 		//smart one

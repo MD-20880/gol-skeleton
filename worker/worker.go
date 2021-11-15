@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"strconv"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
@@ -72,6 +73,7 @@ func calculateHelper(x int, y int, oldWorld *[][]byte, xmap [3]int, ymap [3]int,
 
 	if d_oldWorld[x][y] == 255 && (alive < 2 || alive > 3) {
 		c <- 0
+
 	} else if d_oldWorld[x][y] == 0 && alive == 3 {
 		c <- 255
 	} else {
@@ -86,7 +88,7 @@ func StartWorker(p Params, world [][]byte, startX int, startY int, endX int, end
 type Worker struct {
 }
 
-func (w *Worker) Calculate(request stubs.Request, response *stubs.Response) (err error) {
+func (w *Worker) Calculate(request stubs.Work, response *stubs.GolResultReport) (err error) {
 	fmt.Printf("Request received\n")
 	p := Params{
 		Turns:       request.Turns,
@@ -97,16 +99,37 @@ func (w *Worker) Calculate(request stubs.Request, response *stubs.Response) (err
 	r := request
 	resultMap := make(chan [][]byte, 1)
 	StartWorker(p, r.CalculateMap, r.StartX, r.StartY, r.EndX, r.EndY, resultMap)
-	result := <-resultMap
-	response.Result = result
+	resultWorld := <-resultMap
+	response.StartX = request.StartX
+	response.EndX = request.EndX
+	response.StartY = request.EndY
+	response.ResultMap = resultWorld
+	response.CompleteTurn = request.Turns
 	return
+}
+func subscribeBroker(bAddr string, pAddr string) {
+	conn, _ := rpc.Dial("tcp", bAddr)
+	addr := "127.0.0.1:" + pAddr
+	req := stubs.Subscribe{
+		WorkerAddr: addr,
+		Callback:   stubs.WorkerCalculate,
+	}
+	res := new(stubs.StatusReport)
+	conn.Call(stubs.WorkerSubscribe, req, res)
 }
 
 func main() {
 	pAddr := flag.String("port", "8030", "Port to listen on")
+	bAddr := flag.String("broker", "127.0.0.1:8030", "Port to listen on")
 	flag.Parse()
 	rpc.Register(&Worker{})
-	listener, _ := net.Listen("tcp", ":"+*pAddr)
+	subscribeBroker(*bAddr, *pAddr)
+	listener, err := net.Listen("tcp", ":"+*pAddr)
+	for err != nil {
+		result, _ := strconv.Atoi(*pAddr)
+		*pAddr = strconv.Itoa(result + 10)
+		listener, err = net.Listen("tcp", ":"+*pAddr)
+	}
 	defer listener.Close()
 	rpc.Accept(listener)
 
