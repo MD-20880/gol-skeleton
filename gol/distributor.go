@@ -287,10 +287,23 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 			}
 		}
 	}
+
 	conn, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+	defer conn.Close()
 	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	//test
+
+	//req := stubs.PublishTask{
+	//	GolMap:      world,
+	//	Turns:       p.Turns,
+	//	ImageWidth:  p.ImageWidth,
+	//	ImageHeight: p.ImageHeight,
+	//}
+	//
+	//res := new(stubs.GolResultReport)
+	//conn.Call(stubs.DistributorPublish, req, res)
+	//newWorld = res.ResultMap
 
 	//Run GOL implementation for TURN times.
 	for i := 1; i <= p.Turns; i++ {

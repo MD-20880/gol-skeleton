@@ -22,6 +22,7 @@ func (b *Broker) HandleTask(req stubs.PublishTask, res *stubs.GolResultReport) (
 func (b *Broker) Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err error) {
 	fmt.Println("Receve Subscribe")
 	BrokerService.Subscribe(req, res)
+	res.Msg = "Got it"
 	return
 }
 

@@ -102,9 +102,10 @@ func (w *Worker) Calculate(request stubs.Work, response *stubs.GolResultReport) 
 	resultWorld := <-resultMap
 	response.StartX = request.StartX
 	response.EndX = request.EndX
-	response.StartY = request.EndY
+	response.StartY = request.StartY
 	response.ResultMap = resultWorld
 	response.CompleteTurn = request.Turns
+	response.EndY = request.EndY
 	return
 }
 func subscribeBroker(bAddr string, pAddr string) {
@@ -116,6 +117,8 @@ func subscribeBroker(bAddr string, pAddr string) {
 	}
 	res := new(stubs.StatusReport)
 	conn.Call(stubs.WorkerSubscribe, req, res)
+	fmt.Printf(res.Msg)
+	conn.Close()
 }
 
 func main() {
@@ -123,14 +126,15 @@ func main() {
 	bAddr := flag.String("broker", "127.0.0.1:8030", "Port to listen on")
 	flag.Parse()
 	rpc.Register(&Worker{})
-	subscribeBroker(*bAddr, *pAddr)
 	listener, err := net.Listen("tcp", ":"+*pAddr)
 	for err != nil {
 		result, _ := strconv.Atoi(*pAddr)
 		*pAddr = strconv.Itoa(result + 10)
 		listener, err = net.Listen("tcp", ":"+*pAddr)
 	}
+	subscribeBroker(*bAddr, *pAddr)
 	defer listener.Close()
+	fmt.Println("Listining ")
 	rpc.Accept(listener)
 
 }
