@@ -1,9 +1,5 @@
 package stubs
 
-import (
-	"uk.ac.bris.cs/gameoflife/util"
-)
-
 var GolHandler = "GolOperations.GolWorker" // somehow has to declare like this
 
 type Request struct {
@@ -14,6 +10,6 @@ type Request struct {
 }
 
 type Response struct {
-	World      [][]byte
-	AliveCells []util.Cell
+	World [][]byte
+	// AliveCells []util.Cell
 }

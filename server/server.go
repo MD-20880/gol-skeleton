@@ -9,7 +9,6 @@ import (
 	"net/rpc"
 	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
-	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type GolOperations struct{}
@@ -21,11 +20,11 @@ func (s *GolOperations) GolWorker(req stubs.Request, res *stubs.Response) (err e
 		err = errors.New("no world is given")
 		return
 	}
-	for i := 0; i < req.Turns; i++ {
-		req.World = CalculateNextState(req, 0, req.ImageHeight, 0, req.ImageWidth)
-	}
+
+	req.World = CalculateNextState(req, 0, req.ImageHeight, 0, req.ImageWidth)
+
 	//res.World = worlds
-	res.AliveCells = CalculateAliveCells(req)
+	res.World = req.World
 	return
 }
 
@@ -96,21 +95,6 @@ func count(request stubs.Request, y int, x int) int {
 		count--
 	}
 	return count
-}
-
-func CalculateAliveCells(request stubs.Request) []util.Cell {
-	container := make([]util.Cell, 0)
-	//count := 0
-	for i := 0; i < request.ImageWidth; i++ {
-		for j := 0; j < request.ImageHeight; j++ {
-			if request.World[i][j] == 255 {
-				container = append(container, util.Cell{X: j, Y: i}) // had no key here before
-				//container[count] = util.Cell{j, i}
-				//count++
-			}
-		}
-	}
-	return container
 }
 
 func handleError(err error) {
