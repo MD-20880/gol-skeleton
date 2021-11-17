@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/ChrisGora/semaphore"
 	"net"
 	"net/rpc"
 	BrokerService "uk.ac.bris.cs/gameoflife/Broker/src"
@@ -14,7 +15,12 @@ type Broker struct {
 
 func (b *Broker) HandleTask(req stubs.PublishTask, res *stubs.GolResultReport) (err error) {
 	fmt.Println("Receive Request")
-	BrokerService.HandleTask(req, res)
+	id := BrokerService.IdGenerator()
+	BrokerService.Topics[id] = make(chan stubs.Work)
+	BrokerService.Buffers[id] = make(chan *stubs.GolResultReport)
+	BrokerService.WorkSemaList[id] = semaphore.Init(999, 0)
+	BrokerService.HandleTask(req, res, id)
+
 	return
 
 }
@@ -29,10 +35,11 @@ func (b *Broker) Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err er
 func main() {
 	BrokerService.Topics = map[string]chan stubs.Work{}
 	BrokerService.Buffers = map[string]chan *stubs.GolResultReport{}
+	BrokerService.WorkSemaList = map[string]semaphore.Semaphore{}
 	BrokerService.Subscribers = make([]*rpc.Client, 0)
-	BrokerService.Topics["1"] = make(chan stubs.Work)
-	BrokerService.Buffers["1"] = make(chan *stubs.GolResultReport)
+	BrokerService.WorkChan = make(chan stubs.Work)
 
+	go BrokerService.WorkDistributor()
 	pAddr := flag.String("port", "8030", "Port to listen on")
 	flag.Parse()
 	rpc.Register(&Broker{})

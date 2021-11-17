@@ -7,9 +7,7 @@ import (
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
-var ()
-
-func SubscriberLoop(req stubs.Subscribe, work chan stubs.Work, workResultchan chan *stubs.GolResultReport) {
+func SubscriberLoop(req stubs.Subscribe, work chan stubs.Work) {
 	conn, e := rpc.Dial("tcp", req.WorkerAddr)
 	if e != nil {
 		os.Exit(2)
@@ -20,18 +18,19 @@ func SubscriberLoop(req stubs.Subscribe, work chan stubs.Work, workResultchan ch
 		//build connection
 		currentWork := <-work
 		workResult, err := working(conn, currentWork, req.Callback)
+		//If Error Occur, Put current work back into work queue
 		if err != nil {
 			conn.Close()
 			Subscribers = append(Subscribers[:id], Subscribers[id+1:]...)
 			work <- currentWork
 			break
 		}
-		workResultchan <- workResult
+		Buffers[currentWork.Owner] <- workResult
 	}
 }
 
 func Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err error) {
-	go SubscriberLoop(req, Topics["1"], Buffers["1"])
+	go SubscriberLoop(req, WorkChan)
 	res.Msg = "Get It"
 	return
 }

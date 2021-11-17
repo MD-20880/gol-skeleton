@@ -60,6 +60,7 @@ type Work struct {
 	EndX         int
 	EndY         int
 	CalculateMap [][]byte
+	Owner        string
 }
 
 type StatusReport struct {
