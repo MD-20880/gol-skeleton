@@ -106,6 +106,7 @@ func (w *Worker) Calculate(request stubs.Work, response *stubs.GolResultReport) 
 	response.ResultMap = resultWorld
 	response.CompleteTurn = request.Turns
 	response.EndY = request.EndY
+	fmt.Println("Request Finish")
 	return
 }
 func subscribeBroker(bAddr string, pAddr string) {

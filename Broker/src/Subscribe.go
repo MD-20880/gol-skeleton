@@ -12,8 +12,9 @@ func SubscriberLoop(req stubs.Subscribe, work chan stubs.Work) {
 	if e != nil {
 		os.Exit(2)
 	}
-	id := len(Subscribers)
-	Subscribers = append(Subscribers, conn)
+
+	id := IdGenerator()
+	Subscribers[id] = conn
 	for {
 		//build connection
 		currentWork := <-work
@@ -21,11 +22,17 @@ func SubscriberLoop(req stubs.Subscribe, work chan stubs.Work) {
 		//If Error Occur, Put current work back into work queue
 		if err != nil {
 			conn.Close()
-			Subscribers = append(Subscribers[:id], Subscribers[id+1:]...)
+			SubscribersMx.Lock()
+			delete(Subscribers, id)
+			SubscribersMx.Unlock()
 			work <- currentWork
 			break
 		}
-		Buffers[currentWork.Owner] <- workResult
+		BufferMx.RLock()
+		bufferChan := Buffers[currentWork.Owner]
+		BufferMx.RUnlock()
+
+		bufferChan <- workResult
 	}
 }
 

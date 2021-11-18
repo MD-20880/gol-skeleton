@@ -8,33 +8,57 @@ import (
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
-var Subscribers []*rpc.Client
+//Worker Subscriber List
+var Subscribers map[string]*rpc.Client
+var SubscribersMx sync.RWMutex
+
+//Topics : {id : work sending channel} contain channels for handler sending work to subscribers
 var Topics map[string]chan stubs.Work
 var TopicsMx sync.RWMutex
+
+//Buffers : { id : result receiving channel } contain channels for handler receiving working result
 var Buffers map[string]chan *stubs.GolResultReport
+var BufferMx sync.RWMutex
 
+//WorkSemaList : { id : whether work exist in channel } Use to identify whether channel has work left
 var WorkSemaList map[string]semaphore.Semaphore
-var WorkSema = semaphore.Init(999, 0)
+var WorkSemaListMx sync.RWMutex
 
-var WorkChan = make(chan stubs.Work)
+var WorkSema semaphore.Semaphore
+
+var WorkChan chan stubs.Work
 
 func WorkDistributor() {
 	for {
 		fmt.Println("Requireing workSema")
 		WorkSema.Wait()
 		fmt.Println("Get WorkSema")
+		WorkSemaListMx.RLock()
 		for key := range WorkSemaList {
+			if _, ok := WorkSemaList[key]; !ok {
+				continue
+			}
 			sema := WorkSemaList[key]
+
 			if sema.GetValue() == 0 {
 				continue
 			}
 			fmt.Println("Waiting for Sema")
 			sema.Wait()
 			fmt.Println("Get Sema")
-			work := <-Topics[key]
+
+			TopicsMx.RLock()
+			topicChan := Topics[key]
+			TopicsMx.RUnlock()
+			fmt.Println("Sending Work")
+			work := <-topicChan
+			fmt.Println("Receive Success")
 			WorkChan <- work
+			fmt.Println("End of Sending")
+
 			fmt.Println("Function End")
 			break
 		}
+		WorkSemaListMx.RUnlock()
 	}
 }

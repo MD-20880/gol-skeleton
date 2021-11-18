@@ -18,13 +18,20 @@ type variables struct {
 }
 
 func initVars(req stubs.PublishTask, res *stubs.GolResultReport, id string) (v variables) {
+
 	WorkList := make([]stubs.Work, 0)
+
+	BufferMx.RLock()
 	ResultChan := Buffers[id]
+	BufferMx.RUnlock()
+
 	CompleteWorld := req.GolMap
+
 	CalculatingWorld := make([][]byte, len(CompleteWorld))
 	for i := 0; i < len(CompleteWorld); i++ {
 		CalculatingWorld[i] = make([]byte, len(CompleteWorld[i]))
 	}
+
 	return variables{
 		id:               id,
 		req:              req,
@@ -80,11 +87,21 @@ func postWork(workList []stubs.Work, id string) {
 func workSender(workList []stubs.Work, id string) {
 	//WorkMutex.RLock()
 	for _, work := range workList {
-		WorkSemaList[id].Post()
-		fmt.Printf("%s : %d\n", id, WorkSemaList[id].GetValue())
+		WorkSemaListMx.RLock()
+		currentWorkSema := WorkSemaList[id]
+		WorkSemaListMx.RUnlock()
+		currentWorkSema.Post()
+
+		fmt.Printf("%s : %d\n", id, currentWorkSema.GetValue())
 		WorkSema.Post()
 		fmt.Printf("WorkSema : %d\n", WorkSema.GetValue())
-		Topics[id] <- work
+
+		TopicsMx.RLock()
+		topicChan := Topics[id]
+		TopicsMx.RUnlock()
+		fmt.Println("sending To topic chan")
+		topicChan <- work
+		fmt.Println("Sending finish ")
 	}
 	fmt.Println("Sending Loop End")
 	//WorkMutex.RUnlock()
@@ -133,16 +150,33 @@ func receive(jobResult *stubs.GolResultReport, v variables) {
 }
 
 func reply(v variables) {
-
+	v.res.ResultMap = v.CompleteWorld
+	v.res.CompleteTurn = v.req.Turns
+	v.res.StartX = 0
+	v.res.StartY = 0
+	v.res.EndY = len(v.req.GolMap)
+	v.res.EndX = len(v.req.GolMap[0])
+	closeHandler(v.id)
 }
 
 func closeHandler(id string) {
+	TopicsMx.Lock()
 	close(Topics[id])
 	delete(Topics, id)
+	TopicsMx.Unlock()
+
+	BufferMx.Lock()
 	close(Buffers[id])
 	delete(Buffers, id)
+	BufferMx.Unlock()
+
+	WorkSemaListMx.Lock()
+	delete(WorkSemaList, id)
+	WorkSemaListMx.Unlock()
+
 }
 
+//Event Handler
 func checkEvent() {
 
 }
@@ -152,17 +186,17 @@ func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (e
 	v := initVars(req, res, id)
 	//Task Cycle
 	for turn := 0; turn < req.Turns; turn++ {
-		fmt.Println("Spliting")
+		fmt.Printf("%s is Spliting\n", id)
 		//Split One big task into several small tasks
 		v.WorkList = workSplit(v)
 		//Record the number of work been send
 		v.WorkNum = len(v.WorkList)
-		fmt.Println("Posting")
+		fmt.Printf("%s is Posting\n", id)
 		//Post Work
 		postWork(v.WorkList, v.id)
-		fmt.Println("Sending")
+		fmt.Printf("%s is Sending\n", id)
 		workSender(v.WorkList, v.id)
-		fmt.Println("checking")
+		fmt.Printf("%s is checking\n", id)
 		checkWork(v)
 		//res.ResultMap = CalculatingWorld
 		v.CompleteWorld = v.CalculatingWorld
@@ -170,17 +204,10 @@ func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (e
 		for i := 0; i < len(v.CompleteWorld); i++ {
 			CalculatingWorld[i] = make([]byte, len(v.CompleteWorld[i]))
 		}
-		fmt.Println("Updated")
+		fmt.Printf("%s Updated\n", id)
 	}
 	//Response to Request
-	//reply(v)
-	res.ResultMap = v.CompleteWorld
-	res.CompleteTurn = v.req.Turns
-	res.StartX = 0
-	res.StartY = 0
-	res.EndY = len(v.req.GolMap)
-	res.EndX = len(v.req.GolMap[0])
-	closeHandler(v.id)
+	reply(v)
 
 	return
 }
