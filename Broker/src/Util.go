@@ -6,10 +6,8 @@ import (
 	"sync"
 )
 
-var counter = 0
+var Counter int
 var assginMutex sync.Mutex
-var idCollection []string
-var idCollectionMx sync.RWMutex
 
 func errorHandler(err error) {
 	fmt.Println(err)
@@ -17,28 +15,9 @@ func errorHandler(err error) {
 
 func IdGenerator() (id string) {
 	assginMutex.Lock()
-	id = strconv.Itoa(counter)
-	counter++
+	id = strconv.Itoa(Counter)
+	Counter++
 	assginMutex.Unlock()
 
-	idCollectionMx.Lock()
-	idCollection = append(idCollection, id)
-	idCollectionMx.Unlock()
 	return
-}
-
-func SubscriberIdGenerator() (id string) {
-	return
-}
-
-func removeWorkId(delId string) {
-	idCollectionMx.Lock()
-	for i, id := range idCollection {
-		if id == delId {
-			idCollection = append(idCollection[:i], idCollection[i+1:]...)
-			break
-		}
-	}
-	idCollectionMx.Unlock()
-
 }

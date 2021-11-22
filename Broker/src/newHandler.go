@@ -3,6 +3,8 @@ package BrokerService
 import (
 	"fmt"
 	"os"
+	"reflect"
+	"sync"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
@@ -10,11 +12,14 @@ type variables struct {
 	id               string
 	req              stubs.PublishTask
 	res              *stubs.GolResultReport
+	completeTurn     int
 	CompleteWorld    [][]byte
 	CalculatingWorld [][]byte
 	WorkList         []stubs.Work
 	WorkNum          int
 	ResultChan       chan *stubs.GolResultReport
+	worldMx          sync.Mutex
+	eventChan        chan EventRequest
 }
 
 func initVars(req stubs.PublishTask, res *stubs.GolResultReport, id string) (v variables) {
@@ -32,15 +37,22 @@ func initVars(req stubs.PublishTask, res *stubs.GolResultReport, id string) (v v
 		CalculatingWorld[i] = make([]byte, len(CompleteWorld[i]))
 	}
 
+	EventChannelsMx.RLock()
+	eventChan := EventChannels[id]
+	EventChannelsMx.RUnlock()
+
 	return variables{
 		id:               id,
 		req:              req,
 		res:              res,
+		completeTurn:     0,
 		CompleteWorld:    CompleteWorld,
 		CalculatingWorld: CalculatingWorld,
 		WorkList:         WorkList,
 		WorkNum:          0,
 		ResultChan:       ResultChan,
+		worldMx:          sync.Mutex{},
+		eventChan:        eventChan,
 	}
 }
 
@@ -52,7 +64,7 @@ func workSplit(v variables) []stubs.Work {
 	}
 	for i := 0; i < noSubscribers-1; i++ {
 		splitResult = append(splitResult, stubs.Work{
-			Turns:        v.req.Turns,
+			Turns:        1,
 			ImageWidth:   v.req.ImageWidth,
 			ImageHeight:  v.req.ImageHeight,
 			StartX:       i * v.req.ImageHeight / noSubscribers,
@@ -64,7 +76,7 @@ func workSplit(v variables) []stubs.Work {
 		})
 	}
 	splitResult = append(splitResult, stubs.Work{
-		Turns:        v.req.Turns,
+		Turns:        1,
 		ImageWidth:   v.req.ImageWidth,
 		ImageHeight:  v.req.ImageHeight,
 		StartX:       (noSubscribers - 1) * v.req.ImageHeight / noSubscribers,
@@ -92,18 +104,13 @@ func workSender(workList []stubs.Work, id string) {
 		WorkSemaListMx.RUnlock()
 		currentWorkSema.Post()
 
-		fmt.Printf("%s : %d\n", id, currentWorkSema.GetValue())
 		WorkSema.Post()
-		fmt.Printf("WorkSema : %d\n", WorkSema.GetValue())
 
 		TopicsMx.RLock()
 		topicChan := Topics[id]
 		TopicsMx.RUnlock()
-		fmt.Println("sending To topic chan")
 		topicChan <- work
-		fmt.Println("Sending finish ")
 	}
-	fmt.Println("Sending Loop End")
 	//WorkMutex.RUnlock()
 	//time.Sleep(500 * time.Millisecond)
 	//
@@ -123,9 +130,7 @@ func checkWork(v variables) {
 		if work.EndX > len(v.CalculatingWorld) {
 			break
 		}
-		fmt.Println("Receiving")
 		receive(work, v)
-		fmt.Println("Finish receiving")
 		for i := work.StartX; i < work.EndX; i++ {
 			v.CalculatingWorld[i] = work.ResultMap[i-work.StartX]
 		}
@@ -174,40 +179,69 @@ func closeHandler(id string) {
 	delete(WorkSemaList, id)
 	WorkSemaListMx.Unlock()
 
+	EventChannelsMx.Lock()
+	delete(EventChannels, id)
+	EventChannelsMx.Unlock()
+
 }
 
 //Event Handler
-func checkEvent() {
+func eventHandler(v *variables) {
+	//add a receiver here
+LOOP:
+	for {
+		event := <-v.eventChan
+		fmt.Printf("%s\n", reflect.TypeOf(event))
+		if reflect.TypeOf(event).String() == "GetMapEvent" {
+			os.Exit(1000)
+		}
+		switch event.(type) {
+		case GetMapEvent:
+			resultChan := event.(GetMapEvent).SendBack
+			sendNum := v.completeTurn
+			send := CurrentWorld{
+				World: v.CompleteWorld,
+				Turn:  sendNum,
+			}
+			fmt.Printf("Number send %d\n", v.completeTurn)
+			resultChan <- send
 
+		case HandlerStopEvent:
+			break LOOP
+
+		}
+	}
 }
 
 func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (err error) {
+
 	//Initialize variables
 	v := initVars(req, res, id)
+	go eventHandler(&v)
 	//Task Cycle
-	for turn := 0; turn < req.Turns; turn++ {
-		fmt.Printf("%s is Spliting\n", id)
+	for v.completeTurn = 0; v.completeTurn < req.Turns; {
 		//Split One big task into several small tasks
 		v.WorkList = workSplit(v)
 		//Record the number of work been send
 		v.WorkNum = len(v.WorkList)
-		fmt.Printf("%s is Posting\n", id)
 		//Post Work
 		postWork(v.WorkList, v.id)
-		fmt.Printf("%s is Sending\n", id)
 		workSender(v.WorkList, v.id)
-		fmt.Printf("%s is checking\n", id)
 		checkWork(v)
 		//res.ResultMap = CalculatingWorld
+		v.worldMx.Lock()
 		v.CompleteWorld = v.CalculatingWorld
-		CalculatingWorld := make([][]byte, len(v.CompleteWorld))
+		v.completeTurn++
+		fmt.Printf("Now is turn %d\n", v.completeTurn)
+		v.worldMx.Unlock()
+		v.CalculatingWorld = make([][]byte, len(v.CompleteWorld))
 		for i := 0; i < len(v.CompleteWorld); i++ {
-			CalculatingWorld[i] = make([]byte, len(v.CompleteWorld[i]))
+			v.CalculatingWorld[i] = make([]byte, len(v.CompleteWorld[i]))
 		}
-		fmt.Printf("%s Updated\n", id)
 	}
 	//Response to Request
 	reply(v)
 
+	v.eventChan <- HandlerStopEvent{Cmd: HandlerStop}
 	return
 }

@@ -1,7 +1,6 @@
 package BrokerService
 
 import (
-	"fmt"
 	"net/rpc"
 	"os"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -43,7 +42,6 @@ func Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err error) {
 }
 
 func working(conn *rpc.Client, work stubs.Work, callback string) (res *stubs.GolResultReport, err error) {
-	fmt.Println(work.StartX)
 	response := new(stubs.GolResultReport)
 	err = conn.Call(callback, work, response)
 	if err != nil {

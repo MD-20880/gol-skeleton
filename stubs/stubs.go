@@ -29,6 +29,7 @@ type Response struct {
 
 // Distributor -> Broker ( publish task )
 type PublishTask struct {
+	ID          string
 	GolMap      [][]byte
 	Turns       int
 	ImageWidth  int
@@ -70,4 +71,13 @@ type StatusReport struct {
 type SdlUpdate struct {
 	TurnComplete int
 	flipCells    []Cell
+}
+
+type RequestCurrentWorld struct {
+	ID string
+}
+
+type RespondCurrentWorld struct {
+	World [][]byte
+	Turn  int
 }

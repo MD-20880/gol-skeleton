@@ -1,7 +1,6 @@
 package BrokerService
 
 import (
-	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"net/rpc"
 	"sync"
@@ -24,15 +23,16 @@ var BufferMx sync.RWMutex
 var WorkSemaList map[string]semaphore.Semaphore
 var WorkSemaListMx sync.RWMutex
 
+var EventChannels map[string]chan EventRequest
+var EventChannelsMx sync.RWMutex
+
 var WorkSema semaphore.Semaphore
 
 var WorkChan chan stubs.Work
 
 func WorkDistributor() {
 	for {
-		fmt.Println("Requireing workSema")
 		WorkSema.Wait()
-		fmt.Println("Get WorkSema")
 		WorkSemaListMx.RLock()
 		for key := range WorkSemaList {
 			if _, ok := WorkSemaList[key]; !ok {
@@ -43,20 +43,14 @@ func WorkDistributor() {
 			if sema.GetValue() == 0 {
 				continue
 			}
-			fmt.Println("Waiting for Sema")
 			sema.Wait()
-			fmt.Println("Get Sema")
 
 			TopicsMx.RLock()
 			topicChan := Topics[key]
 			TopicsMx.RUnlock()
-			fmt.Println("Sending Work")
 			work := <-topicChan
-			fmt.Println("Receive Success")
 			WorkChan <- work
-			fmt.Println("End of Sending")
 
-			fmt.Println("Function End")
 			break
 		}
 		WorkSemaListMx.RUnlock()

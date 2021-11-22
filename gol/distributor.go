@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/ChrisGora/semaphore"
+	"math/rand"
 	"net/rpc"
 	"os"
 	"strconv"
@@ -42,6 +43,17 @@ var semaPhore semaphore.Semaphore
 var serverList []string
 var connMap map[string]*rpc.Client
 
+func requestMap(id string, conn *rpc.Client) (world [][]byte, turn int) {
+	req := stubs.RequestCurrentWorld{ID: id}
+	res := new(stubs.RespondCurrentWorld)
+	fmt.Println("Send Request")
+	conn.Call("Broker.Getmap", req, res)
+	fmt.Println("Receive Request")
+	world = res.World
+	turn = res.Turn
+	return
+}
+
 func reportCount() {
 	for {
 		time.Sleep(2 * time.Second)
@@ -60,6 +72,26 @@ func reportCount() {
 		}
 	}
 
+}
+
+func dreportCount(id string, conn *rpc.Client) {
+	for {
+		time.Sleep(2 * time.Second)
+		currentWorld, currentTurn := requestMap(id, conn)
+		mutex.Lock()
+		result := CalculateAliveCells(currentWorld)
+		mutex.Unlock()
+		if a.events == true {
+			c.events <- TurnComplete{CompletedTurns: currentTurn}
+			c.events <- AliveCellsCount{
+				CompletedTurns: currentTurn,
+				CellsCount:     len(result),
+			}
+
+		} else {
+			return
+		}
+	}
 }
 
 func readfile(path string) bufio.Scanner {
@@ -229,7 +261,7 @@ func quit() {
 		CompletedTurns: turn,
 		Alive:          aliveCells,
 	}
-	storePgm()
+	//storePgm()
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
@@ -251,6 +283,10 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	c = channels
 	a = *avail
 	semaPhore = semaphore.Init(1, 1)
+	rand.Seed(time.Now().UnixNano())
+	id := strconv.Itoa(rand.Int())
+	conn, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+	defer conn.Close()
 	//getServerList()
 
 	// TODO: Create a 2D slice to store the world.
@@ -279,23 +315,25 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 		chans[i] = make(chan [][]byte)
 	}
 	//Task 3
-	go reportCount()
-	go checkKeyPressed(keyPressed)
-	for i := range world {
-		for j := range world[i] {
-			if world[i][j] == 255 {
-				c.events <- CellFlipped{turn, util.Cell{i, j}}
-			}
-		}
-	}
 
-	conn, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-	defer conn.Close()
+	go dreportCount(id, conn)
+	//go reportCount()
+	go checkKeyPressed(keyPressed)
+
+	//go reportCount()
+
+	//for i := range world {
+	//	for j := range world[i] {
+	//		if world[i][j] == 255 {
+	//			c.events <- CellFlipped{turn, util.Cell{i, j}}
+	//		}
+	//	}
+	//}
+
 	//c.events <- TurnComplete{CompletedTurns: turn}
 
-	//test
-
 	//req := stubs.PublishTask{
+	//	ID: 		 id,
 	//	GolMap:      world,
 	//	Turns:       p.Turns,
 	//	ImageWidth:  p.ImageWidth,
@@ -305,6 +343,9 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	//res := new(stubs.GolResultReport)
 	//conn.Call(stubs.DistributorPublish, req, res)
 	//newWorld = res.ResultMap
+	//mutex.Lock()
+	//world = newWorld
+	//mutex.Unlock()
 
 	//Run GOL implementation for TURN times.
 	for i := 1; i <= p.Turns; i++ {
