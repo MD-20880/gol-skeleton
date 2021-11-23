@@ -47,7 +47,7 @@ func tempSave() {
 	}
 	//Task 3
 
-	go dreportCount(id, conn)
+	go dreportCount()
 	//go reportCount()
 	////go checkKeyPressed(keyPressed)
 

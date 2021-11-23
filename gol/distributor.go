@@ -42,6 +42,7 @@ var semaPhore semaphore.Semaphore
 var serverList []string
 var connMap map[string]*rpc.Client
 var conn *rpc.Client
+var id string
 
 //Parallel Functions
 
@@ -111,7 +112,7 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	a = *avail
 	semaPhore = semaphore.Init(1, 1)
 	rand.Seed(time.Now().UnixNano())
-	id := strconv.Itoa(rand.Int())
+	id = strconv.Itoa(rand.Int())
 	conn, _ = rpc.Dial("tcp", "127.0.0.1:8030")
 	defer conn.Close()
 
@@ -134,6 +135,6 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	}
 
 	turn = 0
-	//SDLWorkFlow(params,channels,avail,keyPressed)
+	//SDLWorkFlow(keyPressed,id)
 	DistributedWorkFlow(keyPressed, id)
 }

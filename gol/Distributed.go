@@ -2,14 +2,13 @@ package gol
 
 import (
 	"fmt"
-	"net/rpc"
 	"os"
 	"strconv"
 	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
-func requestMap(id string, conn *rpc.Client) (world [][]byte, turn int) {
+func requestMap() (world [][]byte, turn int) {
 	req := stubs.RequestCurrentWorld{ID: id}
 	res := new(stubs.RespondCurrentWorld)
 	conn.Call("Broker.Getmap", req, res)
@@ -18,8 +17,8 @@ func requestMap(id string, conn *rpc.Client) (world [][]byte, turn int) {
 	return
 }
 
-func dstorePgm(id string, conn *rpc.Client) {
-	requestMap(id, conn)
+func dstorePgm() {
+	world, turn = requestMap()
 	c.ioCommand <- ioOutput
 	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- filename
@@ -30,10 +29,10 @@ func dstorePgm(id string, conn *rpc.Client) {
 	}
 }
 
-func dreportCount(id string, conn *rpc.Client) {
+func dreportCount() {
 	for {
 		time.Sleep(2 * time.Second)
-		currentWorld, currentTurn := requestMap(id, conn)
+		currentWorld, currentTurn := requestMap()
 		mutex.Lock()
 		result := CalculateAliveCells(currentWorld)
 		mutex.Unlock()
@@ -50,7 +49,7 @@ func dreportCount(id string, conn *rpc.Client) {
 	}
 }
 
-func dcheckKeyPressed(keyPressed <-chan rune, id string) {
+func dcheckKeyPressed(keyPressed <-chan rune) {
 	for {
 		i := <-keyPressed
 		semaPhore.Wait()
@@ -63,7 +62,7 @@ func dcheckKeyPressed(keyPressed <-chan rune, id string) {
 				quit()
 			}
 		case 's':
-			dstorePgm(id, conn)
+			dstorePgm()
 		case 'p':
 			{
 				key := <-keyPressed
@@ -89,8 +88,8 @@ func DistributedWorkFlow(keyPressed <-chan rune, id string) {
 		chans[i] = make(chan [][]byte)
 	}
 
-	go dreportCount(id, conn)
-	go dcheckKeyPressed(keyPressed, id)
+	go dreportCount()
+	go dcheckKeyPressed(keyPressed)
 
 	req := stubs.PublishTask{
 		ID:          id,
