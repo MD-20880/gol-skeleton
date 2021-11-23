@@ -85,51 +85,6 @@ func updateTurn(chans []chan [][]byte) [][]byte {
 
 }
 
-func cellsGreaterThan(a util.Cell, b util.Cell) bool {
-	if a.X > b.X {
-		return true
-	} else if a.Y > b.Y {
-		return true
-	} else {
-		return false
-	}
-}
-func cellEqual(a util.Cell, b util.Cell) bool {
-	if a.Y == b.Y && a.X == b.X {
-		return true
-	}
-	return false
-}
-
-//TODO : I just want to remind you that this function sucks.
-func checkFlipCells(oldWorld *[][]byte, newWorld *[][]byte, p Params) []util.Cell {
-	oldCells := CalculateAliveCells(p, *oldWorld)
-	newCells := CalculateAliveCells(p, *newWorld)
-	flipCells := make([]util.Cell, 0)
-	i := 0
-	j := 0
-	for i < len(oldCells) && j < len(newCells) {
-		if cellEqual(oldCells[i], newCells[j]) {
-			i++
-			j++
-		} else if cellsGreaterThan(oldCells[i], newCells[j]) {
-			flipCells = append(flipCells, newCells[j])
-			j++
-		} else {
-			flipCells = append(flipCells, oldCells[i])
-			i++
-		}
-	}
-	if i < len(oldCells) {
-		addCell := oldCells[i:len(oldCells)]
-		flipCells = append(flipCells, addCell...)
-	} else if j < len(newCells) {
-		addCell := newCells[j:len(newCells)]
-		flipCells = append(flipCells, addCell...)
-	}
-	return flipCells
-}
-
 func newCheckFlipCells() []util.Cell {
 
 	flipCells := make([]util.Cell, 0)
