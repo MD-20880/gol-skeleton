@@ -1,14 +1,77 @@
 package gol
 
 import (
-	"net/rpc"
+	"fmt"
+	"os"
+	"strconv"
+	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
+func reportCount() {
+	for {
+		time.Sleep(2 * time.Second)
+		mutex.Lock()
+		result := CalculateAliveCells(world)
+		currentTurn := turn
+		mutex.Unlock()
+		if a.events == true {
+			c.events <- AliveCellsCount{
+				CompletedTurns: currentTurn,
+				CellsCount:     len(result),
+			}
+
+		} else {
+			return
+		}
+	}
+
+}
+
+func storePgm() {
+	c.ioCommand <- ioOutput
+	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(turn)
+	c.ioFilename <- filename
+	for i := range world {
+		for j := range world[i] {
+			c.ioOutput <- world[i][j]
+		}
+	}
+}
+
+func checkKeyPressed(keyPressed <-chan rune) {
+	for {
+		i := <-keyPressed
+		semaPhore.Wait()
+		switch i {
+		case 'k':
+			{
+				req := stubs.Kill{Msg: "kill"}
+				res := new(stubs.StatusReport)
+				conn.Go(stubs.KillBroker, req, res, nil)
+				quit()
+			}
+		case 's':
+			storePgm()
+		case 'p':
+			{
+				key := <-keyPressed
+				for key != 'p' {
+					key = <-keyPressed
+				}
+				fmt.Printf("Continuing\n")
+			}
+		case 'q':
+			quit()
+			os.Exit(1)
+		}
+		semaPhore.Post()
+
+	}
+}
+
 func SDLWorkFlow(keyPressed <-chan rune, id string) {
-	conn, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-	defer conn.Close()
 
 	chans := make([]chan [][]byte, p.Threads)
 	for i := range chans {
@@ -45,7 +108,7 @@ func SDLWorkFlow(keyPressed <-chan rune, id string) {
 		conn.Call(stubs.DistributorPublish, req, res)
 		newWorld = res.ResultMap
 
-		flipCells := newCheckFlipCells()
+		flipCells := CheckFlipCells()
 		for j := range flipCells {
 			c.events <- CellFlipped{turn, flipCells[j]}
 		}

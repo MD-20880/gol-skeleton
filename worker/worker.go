@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"os"
 	"strconv"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
@@ -109,6 +110,12 @@ func (w *Worker) Calculate(request stubs.Work, response *stubs.GolResultReport) 
 	fmt.Println("Request Finish")
 	return
 }
+
+func (w *Worker) Kill(req stubs.Kill, rsp *stubs.StatusReport) (err error) {
+	os.Exit(10)
+	return
+}
+
 func subscribeBroker(bAddr string, pAddr string) {
 	conn, _ := rpc.Dial("tcp", bAddr)
 	addr := "127.0.0.1:" + pAddr

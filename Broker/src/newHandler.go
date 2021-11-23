@@ -19,6 +19,7 @@ type variables struct {
 	ResultChan       chan *stubs.GolResultReport
 	worldMx          sync.Mutex
 	eventChan        chan EventRequest
+	closed           bool
 }
 
 func initVars(req stubs.PublishTask, res *stubs.GolResultReport, id string) (v variables) {
@@ -52,6 +53,7 @@ func initVars(req stubs.PublishTask, res *stubs.GolResultReport, id string) (v v
 		ResultChan:       ResultChan,
 		worldMx:          sync.Mutex{},
 		eventChan:        eventChan,
+		closed:           false,
 	}
 }
 
@@ -209,9 +211,12 @@ LOOP:
 			fmt.Println("5")
 
 		case HandlerStop:
-			break LOOP
+			v.closed = true
 
+		case HandlerLoopStop:
+			break LOOP
 		}
+
 	}
 }
 
@@ -221,7 +226,7 @@ func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (e
 	v := initVars(req, res, id)
 	go eventHandler(&v)
 	//Task Cycle
-	for v.completeTurn = 0; v.completeTurn < req.Turns; {
+	for v.completeTurn = 0; !v.closed && v.completeTurn < req.Turns; {
 		//Split One big task into several small tasks
 		v.WorkList = workSplit(v)
 		//Record the number of work been send
@@ -243,6 +248,6 @@ func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (e
 	//Response to Request
 	reply(v)
 
-	v.eventChan <- HandlerStopEvent{Cmd: HandlerStop}
+	v.eventChan <- HandlerLoopStopEvent{Cmd: HandlerLoopStop}
 	return
 }

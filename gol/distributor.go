@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -42,57 +41,9 @@ var turn int
 var semaPhore semaphore.Semaphore
 var serverList []string
 var connMap map[string]*rpc.Client
-
-//Distributed Functions
-func requestMap(id string, conn *rpc.Client) (world [][]byte, turn int) {
-	req := stubs.RequestCurrentWorld{ID: id}
-	res := new(stubs.RespondCurrentWorld)
-	conn.Call("Broker.Getmap", req, res)
-	world = res.World
-	turn = res.Turn
-	return
-}
-
-func dreportCount(id string, conn *rpc.Client) {
-	for {
-		time.Sleep(2 * time.Second)
-		currentWorld, currentTurn := requestMap(id, conn)
-		mutex.Lock()
-		result := CalculateAliveCells(currentWorld)
-		mutex.Unlock()
-		if a.events == true {
-			c.events <- AliveCellsCount{
-				CompletedTurns: currentTurn,
-				CellsCount:     len(result),
-			}
-			c.events <- TurnComplete{CompletedTurns: currentTurn}
-
-		} else {
-			return
-		}
-	}
-}
+var conn *rpc.Client
 
 //Parallel Functions
-func reportCount() {
-	for {
-		time.Sleep(2 * time.Second)
-		mutex.Lock()
-		result := CalculateAliveCells(world)
-		currentTurn := turn
-		mutex.Unlock()
-		if a.events == true {
-			c.events <- AliveCellsCount{
-				CompletedTurns: currentTurn,
-				CellsCount:     len(result),
-			}
-
-		} else {
-			return
-		}
-	}
-
-}
 
 func readfile(path string) bufio.Scanner {
 	file, err := os.Open(path)
@@ -106,16 +57,6 @@ func readfile(path string) bufio.Scanner {
 }
 
 //This function Work just well
-func storePgm() {
-	c.ioCommand <- ioOutput
-	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(turn)
-	c.ioFilename <- filename
-	for i := range world {
-		for j := range world[i] {
-			c.ioOutput <- world[i][j]
-		}
-	}
-}
 
 func CalculateAliveCells(world [][]byte) []util.Cell {
 	var cells = []util.Cell{}
@@ -129,9 +70,7 @@ func CalculateAliveCells(world [][]byte) []util.Cell {
 	return cells
 }
 
-//TODO : I just want to remind you that this function sucks.
-
-func newCheckFlipCells() []util.Cell {
+func CheckFlipCells() []util.Cell {
 
 	flipCells := make([]util.Cell, 0)
 	for i := range world {
@@ -142,30 +81,6 @@ func newCheckFlipCells() []util.Cell {
 		}
 	}
 	return flipCells
-}
-
-func checkKeyPressed(keyPressed <-chan rune) {
-	for {
-		i := <-keyPressed
-		semaPhore.Wait()
-		switch i {
-		case 's':
-			storePgm()
-		case 'p':
-			{
-				key := <-keyPressed
-				for key != 'p' {
-					key = <-keyPressed
-				}
-				fmt.Printf("Continuing\n")
-			}
-		case 'q':
-			quit()
-			//os.Exit(1)
-		}
-		semaPhore.Post()
-
-	}
 }
 
 func quit() {
@@ -187,7 +102,6 @@ func quit() {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	a.events = false
-
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -198,6 +112,8 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	semaPhore = semaphore.Init(1, 1)
 	rand.Seed(time.Now().UnixNano())
 	id := strconv.Itoa(rand.Int())
+	conn, _ = rpc.Dial("tcp", "127.0.0.1:8030")
+	defer conn.Close()
 
 	// TODO: Create a 2D slice to store the world.
 	world = make([][]byte, p.ImageHeight)

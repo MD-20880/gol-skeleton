@@ -97,7 +97,7 @@ func tempSave() {
 	//	//stupid function
 	//	//flipCells := checkFlipCells(&world,&newWorld,p)
 	//	//smart one
-	//	flipCells := newCheckFlipCells()
+	//	flipCells := CheckFlipCells()
 	//	for j := range flipCells {
 	//		c.events <- CellFlipped{turn, flipCells[j]}
 	//	}

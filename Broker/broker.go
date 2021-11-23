@@ -49,6 +49,12 @@ func (b *Broker) HandleTask(req stubs.PublishTask, res *stubs.GolResultReport) (
 
 }
 
+func (b *Broker) Kill(req stubs.Kill, res *stubs.StatusReport) (err error) {
+	go quitBroker()
+	return
+
+}
+
 func (b *Broker) Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err error) {
 	fmt.Println("Receve Subscribe")
 	BrokerService.Subscribe(req, res)
@@ -104,6 +110,21 @@ func initializeBroker() {
 
 	BrokerService.TestChan = make(chan BrokerService.EventRequest)
 
+}
+
+func quitBroker() {
+	BrokerService.SubscribersMx.Lock()
+	BrokerService.EventChannelsMx.Lock()
+
+	for keys := range BrokerService.EventChannels {
+		BrokerService.EventChannels[keys] <- BrokerService.HandlerStopEvent{Cmd: BrokerService.HandlerStop}
+	}
+	for keys := range BrokerService.Subscribers {
+		newReq := stubs.Kill{Msg: "kill"}
+		newRes := new(stubs.StatusReport)
+		BrokerService.Subscribers[keys].Go(stubs.KillWorker, newReq, newRes, nil)
+	}
+	os.Exit(10)
 }
 
 func main() {

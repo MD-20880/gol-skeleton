@@ -2,8 +2,9 @@ package stubs
 
 var WorkerCalculate = "Worker.Calculate"
 var DistributorPublish = "Broker.HandleTask"
-var Calculate = "Worker.Calculate"
 var WorkerSubscribe = "Broker.Subscribe"
+var KillBroker = "Broker.Kill"
+var KillWorker = "Worker.Kill"
 
 type Cell struct {
 	X, Y int
@@ -80,4 +81,8 @@ type RequestCurrentWorld struct {
 type RespondCurrentWorld struct {
 	World [][]byte
 	Turn  int
+}
+
+type Kill struct {
+	Msg string
 }

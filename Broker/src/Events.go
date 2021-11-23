@@ -5,6 +5,7 @@ type eventCommand uint8
 const (
 	GetMap eventCommand = iota
 	HandlerStop
+	HandlerLoopStop
 )
 
 type EventRequest interface {
@@ -21,6 +22,10 @@ type HandlerStopEvent struct {
 	Cmd eventCommand
 }
 
+type HandlerLoopStopEvent struct {
+	Cmd eventCommand
+}
+
 //EventResponse
 type CurrentWorld struct {
 	World [][]byte
@@ -32,5 +37,9 @@ func (e GetMapEvent) Command() (c eventCommand) {
 }
 
 func (e HandlerStopEvent) Command() (c eventCommand) {
+	return e.Cmd
+}
+
+func (e HandlerLoopStopEvent) Command() (c eventCommand) {
 	return e.Cmd
 }
