@@ -10,17 +10,6 @@ type Cell struct {
 	X, Y int
 }
 
-type Request struct {
-	Turns        int
-	ImageWidth   int
-	ImageHeight  int
-	StartX       int
-	StartY       int
-	EndX         int
-	EndY         int
-	CalculateMap [][]byte
-}
-
 //Rule: every task published by client.GO
 // 		every result returned by client.Call
 

@@ -73,11 +73,6 @@ func checkKeyPressed(keyPressed <-chan rune) {
 
 func SDLWorkFlow(keyPressed <-chan rune, id string) {
 
-	chans := make([]chan [][]byte, p.Threads)
-	for i := range chans {
-		chans[i] = make(chan [][]byte)
-	}
-
 	go reportCount()
 	go checkKeyPressed(keyPressed)
 
@@ -89,7 +84,7 @@ func SDLWorkFlow(keyPressed <-chan rune, id string) {
 		}
 	}
 
-	c.events <- TurnComplete{CompletedTurns: turn}
+	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	//Run GOL implementation for TURN times.
 	for i := 1; i <= p.Turns; i++ {
