@@ -191,22 +191,26 @@ LOOP:
 	for {
 		fmt.Println(v.id)
 		event := <-v.eventChan
+		fmt.Println("0")
 		switch event.Command() {
 		case GetMap:
+			fmt.Println("1")
 			resultChan := event.(GetMapEvent).SendBack
+			fmt.Println("2")
 			sendNum := v.completeTurn
+			fmt.Println("3")
 			send := CurrentWorld{
 				World: v.CompleteWorld,
 				Turn:  sendNum,
 			}
+			fmt.Println("4")
 			fmt.Printf("Number send %d\n", v.completeTurn)
 			resultChan <- send
+			fmt.Println("5")
 
 		case HandlerStop:
 			break LOOP
 
-		default:
-			os.Exit(500)
 		}
 	}
 }

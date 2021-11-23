@@ -43,6 +43,7 @@ var semaPhore semaphore.Semaphore
 var serverList []string
 var connMap map[string]*rpc.Client
 
+//Distributed Functions
 func requestMap(id string, conn *rpc.Client) (world [][]byte, turn int) {
 	req := stubs.RequestCurrentWorld{ID: id}
 	res := new(stubs.RespondCurrentWorld)
@@ -50,26 +51,6 @@ func requestMap(id string, conn *rpc.Client) (world [][]byte, turn int) {
 	world = res.World
 	turn = res.Turn
 	return
-}
-
-func reportCount() {
-	for {
-		time.Sleep(2 * time.Second)
-		mutex.Lock()
-		result := CalculateAliveCells(world)
-		currentTurn := turn
-		mutex.Unlock()
-		if a.events == true {
-			c.events <- AliveCellsCount{
-				CompletedTurns: currentTurn,
-				CellsCount:     len(result),
-			}
-
-		} else {
-			return
-		}
-	}
-
 }
 
 func dreportCount(id string, conn *rpc.Client) {
@@ -92,6 +73,27 @@ func dreportCount(id string, conn *rpc.Client) {
 	}
 }
 
+//Parallel Functions
+func reportCount() {
+	for {
+		time.Sleep(2 * time.Second)
+		mutex.Lock()
+		result := CalculateAliveCells(world)
+		currentTurn := turn
+		mutex.Unlock()
+		if a.events == true {
+			c.events <- AliveCellsCount{
+				CompletedTurns: currentTurn,
+				CellsCount:     len(result),
+			}
+
+		} else {
+			return
+		}
+	}
+
+}
+
 func readfile(path string) bufio.Scanner {
 	file, err := os.Open(path)
 	//if err != nil{
@@ -101,18 +103,6 @@ func readfile(path string) bufio.Scanner {
 	scanner := bufio.NewScanner(file)
 	return *scanner
 
-}
-
-func getServerList() {
-	connMap = map[string]*rpc.Client{}
-	serverList = make([]string, 0)
-	scanner := readfile("gol/serverList")
-	for scanner.Scan() {
-		serverList = append(serverList, scanner.Text())
-	}
-	for _, server := range serverList {
-		connMap[server], _ = rpc.Dial("tcp", server)
-	}
 }
 
 //This function Work just well
@@ -125,54 +115,6 @@ func storePgm() {
 			c.ioOutput <- world[i][j]
 		}
 	}
-}
-
-func updateTurn(chans []chan [][]byte) [][]byte {
-	var updatedWorld [][]byte
-	for i := 0; i < p.Threads-1; i++ {
-		go startWorker(i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i], serverList[i%(len(serverList))])
-	}
-	go startWorker((p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1], serverList[0])
-
-	for i := range chans {
-		tempStore := <-chans[i]
-		updatedWorld = append(updatedWorld, tempStore...)
-	}
-
-	return updatedWorld
-
-}
-
-func startWorker(startX int, startY int, endX int, endY int, resultchan chan [][]byte, server string) {
-	req := stubs.Request{
-		Turns:        turn,
-		ImageWidth:   p.ImageWidth,
-		ImageHeight:  p.ImageHeight,
-		StartX:       startX,
-		StartY:       startY,
-		EndX:         endX,
-		EndY:         endY,
-		CalculateMap: world,
-	}
-	rsp := new(stubs.Response)
-	connMap[server].Call(stubs.Calculate, req, rsp)
-	resultchan <- rsp.Result
-}
-
-func cellsGreaterThan(a util.Cell, b util.Cell) bool {
-	if a.X > b.X {
-		return true
-	} else if a.Y > b.Y {
-		return true
-	} else {
-		return false
-	}
-}
-func cellEqual(a util.Cell, b util.Cell) bool {
-	if a.Y == b.Y && a.X == b.X {
-		return true
-	}
-	return false
 }
 
 func CalculateAliveCells(world [][]byte) []util.Cell {
@@ -188,33 +130,6 @@ func CalculateAliveCells(world [][]byte) []util.Cell {
 }
 
 //TODO : I just want to remind you that this function sucks.
-func checkFlipCells(oldWorld *[][]byte, newWorld *[][]byte, p Params) []util.Cell {
-	oldCells := CalculateAliveCells(*oldWorld)
-	newCells := CalculateAliveCells(*newWorld)
-	flipCells := make([]util.Cell, 0)
-	i := 0
-	j := 0
-	for i < len(oldCells) && j < len(newCells) {
-		if cellEqual(oldCells[i], newCells[j]) {
-			i++
-			j++
-		} else if cellsGreaterThan(oldCells[i], newCells[j]) {
-			flipCells = append(flipCells, newCells[j])
-			j++
-		} else {
-			flipCells = append(flipCells, oldCells[i])
-			i++
-		}
-	}
-	if i < len(oldCells) {
-		addCell := oldCells[i:len(oldCells)]
-		flipCells = append(flipCells, addCell...)
-	} else if j < len(newCells) {
-		addCell := newCells[j:len(newCells)]
-		flipCells = append(flipCells, addCell...)
-	}
-	return flipCells
-}
 
 func newCheckFlipCells() []util.Cell {
 
@@ -259,7 +174,7 @@ func quit() {
 		CompletedTurns: turn,
 		Alive:          aliveCells,
 	}
-	//storePgm()
+	storePgm()
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
@@ -283,9 +198,6 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	semaPhore = semaphore.Init(1, 1)
 	rand.Seed(time.Now().UnixNano())
 	id := strconv.Itoa(rand.Int())
-	conn, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-	defer conn.Close()
-	//getServerList()
 
 	// TODO: Create a 2D slice to store the world.
 	world = make([][]byte, p.ImageHeight)
@@ -306,78 +218,6 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	}
 
 	turn = 0
-
-	// TODO: Execute all turns of the Game of Life.
-	chans := make([]chan [][]byte, p.Threads)
-	for i := range chans {
-		chans[i] = make(chan [][]byte)
-	}
-	//Task 3
-
-	go dreportCount(id, conn)
-	//go reportCount()
-	go checkKeyPressed(keyPressed)
-
-	//go reportCount()
-
-	//for i := range world {
-	//	for j := range world[i] {
-	//		if world[i][j] == 255 {
-	//			c.events <- CellFlipped{turn, util.Cell{i, j}}
-	//		}
-	//	}
-	//}
-
-	//c.events <- TurnComplete{CompletedTurns: turn}
-
-	req := stubs.PublishTask{
-		ID:          id,
-		GolMap:      world,
-		Turns:       p.Turns,
-		ImageWidth:  p.ImageWidth,
-		ImageHeight: p.ImageHeight,
-	}
-
-	res := new(stubs.GolResultReport)
-	conn.Call(stubs.DistributorPublish, req, res)
-	newWorld = res.ResultMap
-	mutex.Lock()
-	world = newWorld
-	mutex.Unlock()
-
-	//Run GOL implementation for TURN times.
-	//for i := 1; i <= p.Turns; i++ {
-	//	semaPhore.Wait()
-	//
-	//	//newWorld = updateTurn(chans)
-	//	req := stubs.PublishTask{
-	//		ID: 		 id,
-	//		GolMap:      world,
-	//		Turns:       1,
-	//		ImageWidth:  p.ImageWidth,
-	//		ImageHeight: p.ImageHeight,
-	//	}
-	//
-	//	res := new(stubs.GolResultReport)
-	//	conn.Call(stubs.DistributorPublish, req, res)
-	//	newWorld = res.ResultMap
-	//	//stupid function
-	//	//flipCells := checkFlipCells(&world,&newWorld,p)
-	//	//smart one
-	//	flipCells := newCheckFlipCells()
-	//	for j := range flipCells {
-	//		c.events <- CellFlipped{turn, flipCells[j]}
-	//	}
-	//	c.events <- TurnComplete{CompletedTurns: turn}
-	//	//cell Flipped event
-	//	mutex.Lock()
-	//	world = newWorld
-	//	turn = i
-	//	mutex.Unlock()
-	//	semaPhore.Post()
-	//}
-
-	// TODO: Report the final state using FinalTurnCompleteEvent.
-	quit()
-	close(c.events)
+	//SDLWorkFlow(params,channels,avail,keyPressed)
+	DistributedWorkFlow(keyPressed, id)
 }
