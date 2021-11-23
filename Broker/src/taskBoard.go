@@ -30,6 +30,8 @@ var WorkSema semaphore.Semaphore
 
 var WorkChan chan stubs.Work
 
+var TestChan chan EventRequest
+
 func WorkDistributor() {
 	for {
 		WorkSema.Wait()

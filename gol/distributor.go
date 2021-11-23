@@ -46,9 +46,7 @@ var connMap map[string]*rpc.Client
 func requestMap(id string, conn *rpc.Client) (world [][]byte, turn int) {
 	req := stubs.RequestCurrentWorld{ID: id}
 	res := new(stubs.RespondCurrentWorld)
-	fmt.Println("Send Request")
 	conn.Call("Broker.Getmap", req, res)
-	fmt.Println("Receive Request")
 	world = res.World
 	turn = res.Turn
 	return
@@ -82,11 +80,11 @@ func dreportCount(id string, conn *rpc.Client) {
 		result := CalculateAliveCells(currentWorld)
 		mutex.Unlock()
 		if a.events == true {
-			c.events <- TurnComplete{CompletedTurns: currentTurn}
 			c.events <- AliveCellsCount{
 				CompletedTurns: currentTurn,
 				CellsCount:     len(result),
 			}
+			c.events <- TurnComplete{CompletedTurns: currentTurn}
 
 		} else {
 			return
@@ -248,7 +246,7 @@ func checkKeyPressed(keyPressed <-chan rune) {
 			}
 		case 'q':
 			quit()
-			os.Exit(1)
+			//os.Exit(1)
 		}
 		semaPhore.Post()
 
@@ -274,7 +272,7 @@ func quit() {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	a.events = false
-	close(c.events)
+
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -332,52 +330,54 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 
 	//c.events <- TurnComplete{CompletedTurns: turn}
 
-	//req := stubs.PublishTask{
-	//	ID: 		 id,
-	//	GolMap:      world,
-	//	Turns:       p.Turns,
-	//	ImageWidth:  p.ImageWidth,
-	//	ImageHeight: p.ImageHeight,
-	//}
-	//
-	//res := new(stubs.GolResultReport)
-	//conn.Call(stubs.DistributorPublish, req, res)
-	//newWorld = res.ResultMap
-	//mutex.Lock()
-	//world = newWorld
-	//mutex.Unlock()
+	req := stubs.PublishTask{
+		ID:          id,
+		GolMap:      world,
+		Turns:       p.Turns,
+		ImageWidth:  p.ImageWidth,
+		ImageHeight: p.ImageHeight,
+	}
+
+	res := new(stubs.GolResultReport)
+	conn.Call(stubs.DistributorPublish, req, res)
+	newWorld = res.ResultMap
+	mutex.Lock()
+	world = newWorld
+	mutex.Unlock()
 
 	//Run GOL implementation for TURN times.
-	for i := 1; i <= p.Turns; i++ {
-		semaPhore.Wait()
-
-		//newWorld = updateTurn(chans)
-		req := stubs.PublishTask{
-			GolMap:      world,
-			Turns:       1,
-			ImageWidth:  p.ImageWidth,
-			ImageHeight: p.ImageHeight,
-		}
-
-		res := new(stubs.GolResultReport)
-		conn.Call(stubs.DistributorPublish, req, res)
-		newWorld = res.ResultMap
-		//stupid function
-		//flipCells := checkFlipCells(&world,&newWorld,p)
-		//smart one
-		flipCells := newCheckFlipCells()
-		for j := range flipCells {
-			c.events <- CellFlipped{turn, flipCells[j]}
-		}
-		c.events <- TurnComplete{CompletedTurns: turn}
-		//cell Flipped event
-		mutex.Lock()
-		world = newWorld
-		turn = i
-		mutex.Unlock()
-		semaPhore.Post()
-	}
+	//for i := 1; i <= p.Turns; i++ {
+	//	semaPhore.Wait()
+	//
+	//	//newWorld = updateTurn(chans)
+	//	req := stubs.PublishTask{
+	//		ID: 		 id,
+	//		GolMap:      world,
+	//		Turns:       1,
+	//		ImageWidth:  p.ImageWidth,
+	//		ImageHeight: p.ImageHeight,
+	//	}
+	//
+	//	res := new(stubs.GolResultReport)
+	//	conn.Call(stubs.DistributorPublish, req, res)
+	//	newWorld = res.ResultMap
+	//	//stupid function
+	//	//flipCells := checkFlipCells(&world,&newWorld,p)
+	//	//smart one
+	//	flipCells := newCheckFlipCells()
+	//	for j := range flipCells {
+	//		c.events <- CellFlipped{turn, flipCells[j]}
+	//	}
+	//	c.events <- TurnComplete{CompletedTurns: turn}
+	//	//cell Flipped event
+	//	mutex.Lock()
+	//	world = newWorld
+	//	turn = i
+	//	mutex.Unlock()
+	//	semaPhore.Post()
+	//}
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 	quit()
+	close(c.events)
 }

@@ -16,8 +16,8 @@ type Broker struct {
 }
 
 func (b *Broker) HandleTask(req stubs.PublishTask, res *stubs.GolResultReport) (err error) {
-	fmt.Println("Receive Request")
 	id := req.ID
+	fmt.Println(id)
 
 	if _, ok := BrokerService.Topics[id]; ok {
 		return &BrokerService.ChannelExist{}
@@ -57,15 +57,16 @@ func (b *Broker) Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err er
 }
 
 func (b *Broker) Getmap(req stubs.RequestCurrentWorld, res *stubs.RespondCurrentWorld) (err error) {
+	fmt.Println("Receive Request")
+	fmt.Println(req.ID)
 
-	if _, ok := BrokerService.Topics[req.ID]; ok {
-		return
-	}
+	//if _, ok := BrokerService.Topics[req.ID]; ok {
+	//	return
+	//}
 
 	resultChan := make(chan BrokerService.CurrentWorld, 1)
 	BrokerService.EventChannelsMx.RLock()
 	BrokerService.EventChannels[req.ID] <- BrokerService.GetMapEvent{BrokerService.GetMap, resultChan}
-	os.Exit(200)
 	BrokerService.EventChannelsMx.RUnlock()
 
 	result := <-resultChan
@@ -100,6 +101,8 @@ func initializeBroker() {
 	BrokerService.WorkSema = semaphore.Init(999, 0)
 
 	BrokerService.Counter = 0
+
+	BrokerService.TestChan = make(chan BrokerService.EventRequest)
 
 }
 

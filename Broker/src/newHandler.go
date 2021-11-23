@@ -3,7 +3,6 @@ package BrokerService
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"sync"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
@@ -190,13 +189,10 @@ func eventHandler(v *variables) {
 	//add a receiver here
 LOOP:
 	for {
+		fmt.Println(v.id)
 		event := <-v.eventChan
-		fmt.Printf("%s\n", reflect.TypeOf(event))
-		if reflect.TypeOf(event).String() == "GetMapEvent" {
-			os.Exit(1000)
-		}
-		switch event.(type) {
-		case GetMapEvent:
+		switch event.Command() {
+		case GetMap:
 			resultChan := event.(GetMapEvent).SendBack
 			sendNum := v.completeTurn
 			send := CurrentWorld{
@@ -206,9 +202,11 @@ LOOP:
 			fmt.Printf("Number send %d\n", v.completeTurn)
 			resultChan <- send
 
-		case HandlerStopEvent:
+		case HandlerStop:
 			break LOOP
 
+		default:
+			os.Exit(500)
 		}
 	}
 }
@@ -232,12 +230,11 @@ func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (e
 		v.worldMx.Lock()
 		v.CompleteWorld = v.CalculatingWorld
 		v.completeTurn++
-		fmt.Printf("Now is turn %d\n", v.completeTurn)
 		v.worldMx.Unlock()
 		v.CalculatingWorld = make([][]byte, len(v.CompleteWorld))
-		for i := 0; i < len(v.CompleteWorld); i++ {
-			v.CalculatingWorld[i] = make([]byte, len(v.CompleteWorld[i]))
-		}
+		//for i := 0; i < len(v.CompleteWorld); i++ {
+		//	v.CalculatingWorld[i] = make([]byte, len(v.CompleteWorld[i]))
+		//}
 	}
 	//Response to Request
 	reply(v)
