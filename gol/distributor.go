@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"bufio"
 	"fmt"
 	"net/rpc"
 	"os"
@@ -27,8 +28,9 @@ var globalWorld [][]byte
 var globalP Params
 var turns int
 var mutex = &sync.Mutex{}
-var globalClient *rpc.Client
+var globalClient []*rpc.Client
 var distributeChannels distributorChannels
+var clientBroker *rpc.Client
 
 func createWorld() [][]byte {
 	world := make([][]byte, globalP.ImageHeight)
@@ -85,6 +87,18 @@ func outputPgm() {
 	distributeChannels.events <- ImageOutputComplete{CompletedTurns: turns, Filename: outputString}
 }
 
+func readFile() []string {
+	f, err := os.Open("serverList")
+	handleError(err)
+	slice := make([]string, 2)
+	scanner := bufio.NewScanner(f)
+	i := 0
+	for scanner.Scan() {
+		slice[i] = scanner.Text()
+	}
+	return slice
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	done := make(chan bool)
@@ -100,30 +114,43 @@ func distributor(p Params, c distributorChannels) {
 
 	getInput(c)
 
-	// fixing rn
-	server := "127.0.0.1:8030"
-	//flag.Parse()
-	fmt.Println("Server: ", server)
-	client, err := rpc.Dial("tcp", server)
-	handleError(err)
-	globalClient = client
+	/* don't need this anymore
+	ipAddr := readFile()
+	length := len(ipAddr)
+	globalClient = make([]*rpc.Client, length)
+	for i := 0; i < length; i++ {
+		client, err := rpc.Dial("tcp", ipAddr[i])
+		handleError(err)
+		globalClient[i] = client
+		defer globalClient[i].Close() // tf do i deal with this
+	} */
 
-	defer client.Close()
-	rpcChannel := make(chan stubs.Response)
+	// ganjuezhegeyemeishayong
+	//rpcChannel := make(chan stubs.Response)
 	go keyPressesAction() // dunno if its okay to put it here
 
-	for i := 0; i < p.Turns; i++ {
-		go makeCall(*globalClient, rpcChannel) // feel like this part is pretty slow
-		response := <-rpcChannel
-		globalWorld = response.World
-		turns++
-	}
+	shabi, err := rpc.Dial("tcp", "127.0.0.1:8030")
+	clientBroker = shabi
+	handleError(err)
+	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: ""}
+	response := new(stubs.Response)
+	clientBroker.Call(stubs.Publish, request, response)
+	// clientBroker.Call(stubs.Distribute, new(stubs.StatusReport), new(stubs.StatusReport))
+	// that part feels more like a temporary measure
+	//for i := 0; i < p.Turns; i++ {
+	//	for j := 0; j < length; j++ {
+	//		go makeCall(*globalClient[j], rpcChannel, (p.ImageHeight / length) * (j + 1))
+	//	}
+	//	response := <-rpcChannel
+	//	globalWorld = response.World
+	//	turns++
+	//}
 
 	done <- true
 	//here as well, global v might be problematic
-	event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: CalculateAliveCells(globalWorld)}
+	event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: CalculateAliveCells(response.World)}
 	c.events <- event
-
+	globalWorld = response.World
 	outputPgm()
 
 	// Make sure that the Io has finished any output before exiting.
@@ -137,7 +164,7 @@ func distributor(p Params, c distributorChannels) {
 }
 
 //TODO not sure if the global v would cause any troubles
-func makeCall(client rpc.Client, channel chan stubs.Response) {
+func makeCall(client rpc.Client, channel chan stubs.Response, length int) {
 	request := stubs.Request{Turns: globalP.Turns, ImageWidth: globalP.ImageWidth, ImageHeight: globalP.ImageHeight, World: globalWorld}
 	response := new(stubs.Response)
 	client.Call(stubs.GolHandler, request, response)
@@ -150,7 +177,10 @@ func tickers(event chan<- Event, done chan bool) {
 	for {
 		select {
 		case <-ticker.C:
-			event <- AliveCellsCount{CompletedTurns: turns, CellsCount: countCell()} // turns haven't been done
+			response := new(stubs.Response)
+			clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
+			// globalWorld = response.World
+			event <- AliveCellsCount{CompletedTurns: response.Turns, CellsCount: countCell(response.World)} // turns haven't been done
 			// find the problem, so when calculating it counts all the points in the world
 			// but maybe when it was counting, the world updated, now it counts the new world therefore the problem
 		case <-done:
@@ -160,9 +190,10 @@ func tickers(event chan<- Event, done chan bool) {
 }
 
 // want to refactor later 1. for range 2. could use channel dunno the implications
-func countCell() int {
+func countCell(world [][]byte) int {
+
 	mutex.Lock()
-	world := globalWorld
+	//world := globalWorld
 	mutex.Unlock()
 	count := 0
 	for i := 0; i < globalP.ImageHeight; i++ {
