@@ -28,24 +28,46 @@ type channelAvailibility struct {
 	ioInput    bool
 }
 
-var p Params
-var world [][]byte
-var newWorld [][]byte
-var mutex = sync.Mutex{}
-var a channelAvailibility
-var c distributorChannels
-var turn int
-var semaPhore semaphore.Semaphore
+/* Struct Variables
+Params
+__________________________________
+    p			Parameters passed by User
+	world 		State of last calculated world { Most of the read operation happends here, protected by mutex lock
+	newWorld	Current Calculating world { Most of the Write Operation happens here, if you want to read from it, please use mutex lock}
+	mutex 		mutex lock that protect shared variables.
+	a 			A struct that store the availability of channels { You can check availability of a channel before using it }
+	c 			A struct that store the channels.
+	turn 		Store the turn of last calculated world. { If you want to update this number, use mutex lock and update it right before / after updating world
+	semaphore 	Semaphore that used to halting main loop. { To stop main loop and handling events }
+*/
 
-func reportCount() {
+type Variables struct {
+	p         Params
+	world     [][]byte
+	newWorld  [][]byte
+	mutex     sync.Mutex
+	a         channelAvailibility
+	c         distributorChannels
+	turn      int
+	semaphore semaphore.Semaphore
+}
+
+/* Function "reportCount" send AliveCellsCount Event every two seconds.
+params
+_______________________________
+	v			Variables { shared variables to every functions, if not mentioned, this is the default parameter description }
+
+*/
+
+func reportCount(v *Variables) {
 	for {
 		time.Sleep(2 * time.Second)
-		mutex.Lock()
-		result := CalculateAliveCells(p, world)
-		currentTurn := turn
-		mutex.Unlock()
-		if a.events == true {
-			c.events <- AliveCellsCount{
+		v.mutex.Lock()
+		result := CalculateAliveCells(v.p, v.world)
+		currentTurn := v.turn
+		v.mutex.Unlock()
+		if v.a.events == true {
+			v.c.events <- AliveCellsCount{
 				CompletedTurns: currentTurn,
 				CellsCount:     len(result),
 			}
@@ -57,24 +79,36 @@ func reportCount() {
 
 }
 
-//This function Work just well
-func storePgm() {
-	c.ioCommand <- ioOutput
-	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(turn)
-	c.ioFilename <- filename
-	for i := range world {
-		for j := range world[i] {
-			c.ioOutput <- world[i][j]
+/*Function "storePgm" communicate to IO routine and save last calculated world.
+
+ */
+func storePgm(v *Variables) {
+	v.c.ioCommand <- ioOutput
+	filename := strconv.Itoa(v.p.ImageWidth) + "x" + strconv.Itoa(v.p.ImageHeight) + "x" + strconv.Itoa(v.turn)
+	v.c.ioFilename <- filename
+	for i := range v.world {
+		for j := range v.world[i] {
+			v.c.ioOutput <- v.world[i][j]
 		}
 	}
 }
 
-func updateTurn(chans []chan [][]byte) [][]byte {
+/*Function "updateTurn" update world by 1 round.
+params
+________________________________________
+	chans			A list of channels receving result. { In order to reduce the time for making channels, Initialization of these channels is not in this function }
+
+return
+________________________________________
+	A world updated from v.world
+
+*/
+func updateTurn(chans []chan [][]byte, v *Variables) [][]byte {
 	var newWorld [][]byte
-	for i := 0; i < p.Threads-1; i++ {
-		go StartWorker(p, world, i*p.ImageHeight/p.Threads, 0, (i+1)*p.ImageHeight/p.Threads, p.ImageWidth, chans[i])
+	for i := 0; i < v.p.Threads-1; i++ {
+		go StartWorker(v.p, v.world, i*v.p.ImageHeight/v.p.Threads, 0, (i+1)*v.p.ImageHeight/v.p.Threads, v.p.ImageWidth, chans[i])
 	}
-	go StartWorker(p, world, (p.Threads-1)*p.ImageHeight/p.Threads, 0, p.ImageHeight, p.ImageWidth, chans[p.Threads-1])
+	go StartWorker(v.p, v.world, (v.p.Threads-1)*v.p.ImageHeight/v.p.Threads, 0, v.p.ImageHeight, v.p.ImageWidth, chans[v.p.Threads-1])
 
 	for i := range chans {
 		tempStore := <-chans[i]
@@ -85,12 +119,19 @@ func updateTurn(chans []chan [][]byte) [][]byte {
 
 }
 
-func newCheckFlipCells() []util.Cell {
+/*Function "checkFlipCells"
+return
+________________________________________
+	A List of cells that need to be flipped
+
+*/
+
+func checkFlipCells(v *Variables) []util.Cell {
 
 	flipCells := make([]util.Cell, 0)
-	for i := range world {
-		for j := range world[i] {
-			if world[i][j] != newWorld[i][j] {
+	for i := range v.world {
+		for j := range v.world[i] {
+			if v.world[i][j] != v.newWorld[i][j] {
 				flipCells = append(flipCells, util.Cell{X: i, Y: j})
 			}
 		}
@@ -98,13 +139,20 @@ func newCheckFlipCells() []util.Cell {
 	return flipCells
 }
 
-func checkKeyPressed(keyPressed <-chan rune) {
+/*Function "checkKeyPressed" Handle keyPress events send through keyPressed channel
+params
+______________________________________
+	keyPressed			Channel receives keyPress event
+
+*/
+
+func checkKeyPressed(keyPressed <-chan rune, v *Variables) {
 	for {
 		i := <-keyPressed
-		semaPhore.Wait()
+		v.semaphore.Wait()
 		switch i {
 		case 's':
-			storePgm()
+			storePgm(v)
 		case 'p':
 			{
 				key := <-keyPressed
@@ -114,44 +162,53 @@ func checkKeyPressed(keyPressed <-chan rune) {
 				fmt.Printf("Continuing\n")
 			}
 		case 'q':
-			quit()
+			quit(v)
 			os.Exit(1)
 		}
-		semaPhore.Post()
+		v.semaphore.Post()
 
 	}
 }
 
-func quit() {
-	aliveCells := CalculateAliveCells(p, world)
-	c.events <- FinalTurnComplete{
-		CompletedTurns: turn,
+/*Function "quit" Quitting behaviors
+
+ */
+
+func quit(v *Variables) {
+	aliveCells := CalculateAliveCells(v.p, v.world)
+	v.c.events <- FinalTurnComplete{
+		CompletedTurns: v.turn,
 		Alive:          aliveCells,
 	}
-	storePgm()
+	storePgm(v)
 	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
+	v.c.ioCommand <- ioCheckIdle
+	<-v.c.ioIdle
 
-	c.events <- StateChange{turn, Quitting}
+	v.c.events <- StateChange{v.turn, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	a.events = false
-	close(c.events)
+	v.a.events = false
+	close(v.c.events)
 }
 
-// distributor divides the work between workers and interacts with other goroutines.
-func distributor(params Params, channels distributorChannels, avail *channelAvailibility, keyPressed <-chan rune) {
-	p = params
-	c = channels
-	a = *avail
-	semaPhore = semaphore.Init(1, 1)
+/*Function "initVars" Initialize variables in struct Variables before distributor start.
 
-	// TODO: Create a 2D slice to store the world.
-	world = make([][]byte, p.ImageHeight)
+ */
+
+func initVars(params Params, channels distributorChannels, avail *channelAvailibility) Variables {
+	p := params
+	c := channels
+	a := *avail
+	semaPhore := semaphore.Init(1, 1)
+
+	//Create a 2D empty world
+	world := make([][]byte, p.ImageHeight)
 	for i := range world {
 		world[i] = make([]byte, p.ImageWidth)
 	}
+
+	///Read world From File
 
 	//Pass File name to IO part
 	file := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
@@ -165,47 +222,63 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 		}
 	}
 
-	turn = 0
+	return Variables{
+		p:         p,
+		world:     world,
+		newWorld:  nil,
+		mutex:     sync.Mutex{},
+		a:         a,
+		c:         c,
+		turn:      0,
+		semaphore: semaPhore,
+	}
 
-	// TODO: Execute all turns of the Game of Life.
-	chans := make([]chan [][]byte, p.Threads)
+}
+
+// distributor divides the work between workers and interacts with other goroutines.
+func distributor(params Params, channels distributorChannels, avail *channelAvailibility, keyPressed <-chan rune) {
+	//Initialization Start
+	v := initVars(params, channels, avail)
+
+	chans := make([]chan [][]byte, v.p.Threads)
 	for i := range chans {
 		chans[i] = make(chan [][]byte)
 	}
-	//Task 3
-	go reportCount()
-	go checkKeyPressed(keyPressed)
-	for i := range world {
-		for j := range world[i] {
-			if world[i][j] == 255 {
-				c.events <- CellFlipped{turn, util.Cell{i, j}}
+
+	for i := range v.world {
+		for j := range v.world[i] {
+			if v.world[i][j] == 255 {
+				v.c.events <- CellFlipped{v.turn, util.Cell{i, j}}
 			}
 		}
 	}
-	//c.events <- TurnComplete{CompletedTurns: turn}
 
-	//test
+	//Initialization End
+
+	//start Allive Cell Count Reporter
+	go reportCount(&v)
+	//start KeyPress Event Handler
+	go checkKeyPressed(keyPressed, &v)
 
 	//Run GOL implementation for TURN times.
-	for i := 1; i <= p.Turns; i++ {
-		semaPhore.Wait()
-		newWorld = updateTurn(chans)
-		//stupid function
-		//flipCells := checkFlipCells(&world,&newWorld,p)
-		//smart one
-		flipCells := newCheckFlipCells()
+	for i := 1; i <= v.p.Turns; i++ {
+		//Semaphore for controlling workflow
+		v.semaphore.Wait()
+		v.newWorld = updateTurn(chans, &v)
+		flipCells := checkFlipCells(&v)
 		for j := range flipCells {
-			c.events <- CellFlipped{turn, flipCells[j]}
+			v.c.events <- CellFlipped{v.turn, flipCells[j]}
 		}
-		c.events <- TurnComplete{CompletedTurns: turn}
-		//cell Flipped event
-		mutex.Lock()
-		world = newWorld
-		turn = i
-		mutex.Unlock()
-		semaPhore.Post()
+		v.c.events <- TurnComplete{CompletedTurns: v.turn}
+
+		//Update World info and protect it by mutex lock
+		v.mutex.Lock()
+		v.world = v.newWorld
+		v.turn = i
+		v.mutex.Unlock()
+		v.semaphore.Post()
 	}
 
-	// TODO: Report the final state using FinalTurnCompleteEvent.
-	quit()
+	//quit after task
+	quit(&v)
 }
