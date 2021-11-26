@@ -131,7 +131,6 @@ func main() {
 
 	initializeBroker()
 	go BrokerService.WorkDistributor()
-
 	pAddr := flag.String("port", "8030", "Port to listen on")
 	flag.Parse()
 	rpc.Register(&Broker{})
