@@ -3,6 +3,7 @@ package gol
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"net/rpc"
 	"os"
 	"strconv"
@@ -114,37 +115,20 @@ func distributor(p Params, c distributorChannels) {
 
 	getInput(c)
 
-	/* don't need this anymore
-	ipAddr := readFile()
-	length := len(ipAddr)
-	globalClient = make([]*rpc.Client, length)
-	for i := 0; i < length; i++ {
-		client, err := rpc.Dial("tcp", ipAddr[i])
-		handleError(err)
-		globalClient[i] = client
-		defer globalClient[i].Close() // tf do i deal with this
-	} */
-
-	// ganjuezhegeyemeishayong
-	//rpcChannel := make(chan stubs.Response)
 	go keyPressesAction() // dunno if its okay to put it here
 
+	dAddr := "8040"
 	shabi, err := rpc.Dial("tcp", "127.0.0.1:8030")
 	clientBroker = shabi
 	handleError(err)
-	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: ""}
+	rpc.Register(&Distributor{})
+	listener, err2 := net.Listen("tcp", ":"+dAddr)
+	handleError(err2)
+	go rpc.Accept(listener)
+	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: "127.0.0.1:" + dAddr}
 	response := new(stubs.Response)
 	clientBroker.Call(stubs.Publish, request, response)
 	// clientBroker.Call(stubs.Distribute, new(stubs.StatusReport), new(stubs.StatusReport))
-	// that part feels more like a temporary measure
-	//for i := 0; i < p.Turns; i++ {
-	//	for j := 0; j < length; j++ {
-	//		go makeCall(*globalClient[j], rpcChannel, (p.ImageHeight / length) * (j + 1))
-	//	}
-	//	response := <-rpcChannel
-	//	globalWorld = response.World
-	//	turns++
-	//}
 
 	done <- true
 	//here as well, global v might be problematic
@@ -163,6 +147,13 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
+type Distributor struct{}
+
+func (d *Distributor) CheckShit(req stubs.StatusReport, res *stubs.StatusReport) (err error) {
+	res.Message = "zhu"
+	return
+}
+
 //TODO not sure if the global v would cause any troubles
 func makeCall(client rpc.Client, channel chan stubs.Response, length int) {
 	request := stubs.Request{Turns: globalP.Turns, ImageWidth: globalP.ImageWidth, ImageHeight: globalP.ImageHeight, World: globalWorld}
@@ -179,7 +170,7 @@ func tickers(event chan<- Event, done chan bool) {
 		case <-ticker.C:
 			response := new(stubs.Response)
 			clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
-			// globalWorld = response.World
+			globalWorld = response.World
 			event <- AliveCellsCount{CompletedTurns: response.Turns, CellsCount: countCell(response.World)} // turns haven't been done
 			// find the problem, so when calculating it counts all the points in the world
 			// but maybe when it was counting, the world updated, now it counts the new world therefore the problem
@@ -190,10 +181,10 @@ func tickers(event chan<- Event, done chan bool) {
 }
 
 // want to refactor later 1. for range 2. could use channel dunno the implications
-func countCell(world [][]byte) int {
+func countCell(world1 [][]byte) int {
 
 	mutex.Lock()
-	//world := globalWorld
+	world := globalWorld
 	mutex.Unlock()
 	count := 0
 	for i := 0; i < globalP.ImageHeight; i++ {

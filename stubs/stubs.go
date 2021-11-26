@@ -5,6 +5,7 @@ var Subscribe = "Broker.Subscribe"
 var Publish = "Broker.Publish"
 var Distribute = "Broker.Distribute"
 var GetWorld = "Broker.GetWorld"
+var CheckShit = "Distributor.CheckShit"
 
 // Request this is the same as publishRequest
 // yeah, now I don't think its gonna work, it needs that method directly its not like you can

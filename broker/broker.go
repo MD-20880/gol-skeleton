@@ -32,17 +32,14 @@ func combine(channels []chan [][]byte, length int) [][]byte {
 	var ultimateSlice [][]uint8
 	for i := 0; i < length; i++ {
 		v := <-channels[i]
-		// fmt.Println(v)
 		ultimateSlice = append(ultimateSlice, v...)
 	}
-	// fmt.Println(ultimateSlice)
 	return ultimateSlice
 }
 
 func calling(i int, req stubs.BrokerRequest, channel chan [][]byte) {
 	res := new(stubs.Response)
-	GlobalClients[0].Call(stubs.GolHandler, req, res)
-	//fmt.Println(res.World)
+	GlobalClients[i].Call(GolHandler, req, res)
 	channel <- res.World
 }
 
@@ -53,7 +50,6 @@ func subscribe(req stubs.Subscription, res *stubs.StatusReport) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	//defer client.Close()
 	GolHandler = req.Callback
 	res.Message = "connection successful"
 }
@@ -63,22 +59,35 @@ func publish(req stubs.Request, res *stubs.Response) {
 	TotalTurns = req.Turns
 	ImageWidth = req.ImageWidth
 	ImageHeight = req.ImageHeight
-	//client, err := rpc.Dial("tcp", req.Address) // probably don't need this
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
-	//DistributorClient = client
-	// fmt.Println(World) okay here
+	client, err := rpc.Dial("tcp", req.Address) // probably don't need this
+	if err != nil {
+		fmt.Println(err)
+	}
+	DistributorClient = client
 	distribute(*new(stubs.StatusReport), new(stubs.StatusReport))
 	res.Turns = TotalTurns
 	res.World = World
-	// fmt.Println(World)
+	CompletedTurns = 0
+}
+
+func checkConnection(channel chan bool) {
+	for {
+		response := new(stubs.StatusReport)
+		DistributorClient.Call(stubs.CheckShit, new(stubs.StatusReport), response)
+		if response.Message == "zhu" {
+			channel <- false
+		} else {
+			channel <- true
+		}
+	}
 }
 
 func distribute(req stubs.StatusReport, res *stubs.StatusReport) {
 	length := len(GlobalClients)
 	channels := createChannels(length)
 	height := ImageHeight / length
+	channel := make(chan bool)
+	go checkConnection(channel)
 	for i := 0; i < TotalTurns; i++ {
 		j := 0
 		for j < length-1 {
@@ -88,8 +97,14 @@ func distribute(req stubs.StatusReport, res *stubs.StatusReport) {
 		}
 		request := stubs.BrokerRequest{Turns: TotalTurns, ImageWidth: ImageWidth, StartY: j * height, EndY: ImageHeight, World: World}
 		go calling(j, request, channels[j])
+		if <-channel {
+			break
+		}
+		Mutex.Lock()
 		World = combine(channels, length) // i don't know if this part would work or not, seems problematic to me
 		CompletedTurns++
+		Mutex.Unlock()
+		fmt.Println(CompletedTurns)
 	}
 }
 
