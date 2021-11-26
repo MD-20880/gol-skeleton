@@ -113,6 +113,7 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	semaPhore = semaphore.Init(1, 1)
 	rand.Seed(time.Now().UnixNano())
 	id = strconv.Itoa(rand.Int())
+	//conn, _ = rpc.Dial("tcp", "54.87.103.8:8030")
 	conn, _ = rpc.Dial("tcp", "127.0.0.1:8030")
 	defer conn.Close()
 

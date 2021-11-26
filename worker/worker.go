@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/rpc"
 	"os"
@@ -15,6 +16,18 @@ type Params struct {
 	Threads     int
 	ImageWidth  int
 	ImageHeight int
+}
+
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
 }
 
 func calculateNextState(p Params, world [][]byte, startX int, startY int, endX int, endY int, resultChan chan [][]byte) {
@@ -118,7 +131,9 @@ func (w *Worker) Kill(req stubs.Kill, rsp *stubs.StatusReport) (err error) {
 
 func subscribeBroker(bAddr string, pAddr string) {
 	conn, _ := rpc.Dial("tcp", bAddr)
-	addr := "127.0.0.1:" + pAddr
+	ip := GetOutboundIP()
+	fmt.Println(ip.String())
+	addr := ip.String() + ":" + pAddr
 	req := stubs.Subscribe{
 		WorkerAddr: addr,
 		Callback:   stubs.WorkerCalculate,
