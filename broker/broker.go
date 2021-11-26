@@ -150,6 +150,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	defer DistributorClient.Close()
 	defer listener.Close()
 	for i := range GlobalClients {
 		defer GlobalClients[i].Close()
