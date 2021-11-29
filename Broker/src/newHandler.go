@@ -162,7 +162,6 @@ func reply(v variables) {
 	v.res.StartY = 0
 	v.res.EndY = len(v.req.GolMap)
 	v.res.EndX = len(v.req.GolMap[0])
-	closeHandler(v.id)
 }
 
 func closeHandler(id string) {
@@ -196,24 +195,19 @@ LOOP:
 		fmt.Println("0")
 		switch event.Command() {
 		case GetMap:
-			fmt.Println("1")
 			resultChan := event.(GetMapEvent).SendBack
-			fmt.Println("2")
 			sendNum := v.completeTurn
-			fmt.Println("3")
 			send := CurrentWorld{
 				World: v.CompleteWorld,
 				Turn:  sendNum,
 			}
-			fmt.Println("4")
-			fmt.Printf("Number send %d\n", v.completeTurn)
 			resultChan <- send
-			fmt.Println("5")
 
 		case HandlerStop:
 			v.closed = true
 
 		case HandlerLoopStop:
+			closeHandler(v.id)
 			break LOOP
 		}
 
@@ -228,25 +222,40 @@ func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (e
 	//Task Cycle
 	for v.completeTurn = 0; !v.closed && v.completeTurn < req.Turns; {
 		//Split One big task into several small tasks
+		fmt.Println("1?")
 		v.WorkList = workSplit(v)
+		fmt.Println("1")
 		//Record the number of work been send
+		fmt.Println("2?")
 		v.WorkNum = len(v.WorkList)
+		fmt.Println("2")
 		//Post Work
+		fmt.Println("3?")
 		postWork(v.WorkList, v.id)
+		fmt.Println("3")
+		fmt.Println("4?")
 		workSender(v.WorkList, v.id)
+		fmt.Println("4")
+		fmt.Println("5?")
 		checkWork(v)
+		fmt.Println("5")
 		//res.ResultMap = CalculatingWorld
+		fmt.Println("6?")
 		v.worldMx.Lock()
 		v.CompleteWorld = v.CalculatingWorld
 		v.completeTurn++
 		v.worldMx.Unlock()
+		fmt.Println("6")
 		v.CalculatingWorld = make([][]byte, len(v.CompleteWorld))
 		//for i := 0; i < len(v.CompleteWorld); i++ {
 		//	v.CalculatingWorld[i] = make([]byte, len(v.CompleteWorld[i]))
 		//}
+		fmt.Println("那tm的问题在哪里?")
 	}
 	//Response to Request
+	fmt.Println("你有问题?")
 	reply(v)
+	fmt.Println("对不起")
 
 	v.eventChan <- HandlerLoopStopEvent{Cmd: HandlerLoopStop}
 	return

@@ -73,14 +73,17 @@ func (b *Broker) Getmap(req stubs.RequestCurrentWorld, res *stubs.RespondCurrent
 	fmt.Println("Receive Request")
 	fmt.Println(req.ID)
 
-	//if _, ok := BrokerService.Topics[req.ID]; ok {
-	//	return
-	//}
+	if _, ok := BrokerService.Topics[req.ID]; ok {
+		return
+	}
 
 	resultChan := make(chan BrokerService.CurrentWorld, 1)
+	fmt.Println("原来问题在这里?")
 	BrokerService.EventChannelsMx.RLock()
-	BrokerService.EventChannels[req.ID] <- BrokerService.GetMapEvent{BrokerService.GetMap, resultChan}
+	tempChan := BrokerService.EventChannels[req.ID]
+	tempChan <- BrokerService.GetMapEvent{BrokerService.GetMap, resultChan}
 	BrokerService.EventChannelsMx.RUnlock()
+	fmt.Println("原来不在这里?")
 
 	result := <-resultChan
 

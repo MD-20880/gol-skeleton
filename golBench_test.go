@@ -13,21 +13,25 @@ func BenchmarkGol(b *testing.B) {
 		{ImageWidth: 512, ImageHeight: 512},
 	}
 	for _, p := range tests {
-		for _, turns := range []int{100} {
+		for _, turns := range []int{0} {
 			p.Turns = turns
 			for threads := 1; threads <= 16; threads++ {
 				p.Threads = threads
 				testName := fmt.Sprintf("%dx%dx%d-%d", p.ImageWidth, p.ImageHeight, p.Turns, p.Threads)
 				b.Run(testName, func(b *testing.B) {
-					events := make(chan gol.Event)
-					go gol.Run(p, events, nil)
-				LOOP:
-					for event := range events {
-						switch event.(type) {
-						case gol.FinalTurnComplete:
-							break LOOP
+					for i := 0; i < b.N; i++ {
+						events := make(chan gol.Event)
+						go gol.Run(p, events, nil)
+					LOOP:
+						for event := range events {
+							switch event.(type) {
+							case gol.FinalTurnComplete:
+								break LOOP
+							}
 						}
+
 					}
+
 				})
 			}
 		}

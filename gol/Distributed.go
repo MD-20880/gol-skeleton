@@ -83,12 +83,6 @@ func dcheckKeyPressed(keyPressed <-chan rune) {
 
 func DistributedWorkFlow(keyPressed <-chan rune, id string) {
 
-	// TODO: Execute all turns of the Game of Life.
-	chans := make([]chan [][]byte, p.Threads)
-	for i := range chans {
-		chans[i] = make(chan [][]byte)
-	}
-
 	go dreportCount()
 	go dcheckKeyPressed(keyPressed)
 
