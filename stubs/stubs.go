@@ -5,6 +5,7 @@ var DistributorPublish = "Broker.HandleTask"
 var WorkerSubscribe = "Broker.Subscribe"
 var KillBroker = "Broker.Kill"
 var KillWorker = "Worker.Kill"
+var KillHandler = "Broker.StopWork"
 
 type Cell struct {
 	X, Y int
@@ -74,4 +75,8 @@ type RespondCurrentWorld struct {
 
 type Kill struct {
 	Msg string
+}
+
+type WorkStop struct {
+	Id string
 }

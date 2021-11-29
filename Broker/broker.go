@@ -55,6 +55,13 @@ func (b *Broker) Kill(req stubs.Kill, res *stubs.StatusReport) (err error) {
 
 }
 
+func (b *Broker) StopWork(req stubs.WorkStop, res *stubs.StatusReport) (err error) {
+	BrokerService.EventChannelsMx.RLock()
+	BrokerService.EventChannels[req.Id] <- BrokerService.HandlerStopEvent{Cmd: BrokerService.HandlerStop}
+	BrokerService.EventChannelsMx.RUnlock()
+	return
+}
+
 func (b *Broker) Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err error) {
 	fmt.Println("Receve Subscribe")
 	BrokerService.Subscribe(req, res)

@@ -72,6 +72,7 @@ func dcheckKeyPressed(keyPressed <-chan rune) {
 				fmt.Printf("Continuing\n")
 			}
 		case 'q':
+			conn.Go(stubs.KillHandler, stubs.WorkStop{Id: id}, new(stubs.StatusReport), nil)
 			quit()
 			os.Exit(1)
 		}
