@@ -146,7 +146,8 @@ func subscribeBroker(bAddr string, pAddr string) {
 
 func main() {
 	pAddr := flag.String("port", "8030", "Port to listen on")
-	bAddr := flag.String("broker", "127.0.0.1:8030", "Port to listen on")
+	//bAddr := flag.String("broker", "127.0.0.1:8030", "Port to listen on")
+	bAddr := flag.String("broker", "3.82.148.15:8030", "Port to listen on")
 	flag.Parse()
 	rpc.Register(&Worker{})
 	listener, err := net.Listen("tcp", ":"+*pAddr)
