@@ -100,29 +100,19 @@ func postWork(workList []stubs.Work, id string) {
 func workSender(workList []stubs.Work, id string) {
 	//WorkMutex.RLock()
 	for _, work := range workList {
-		WorkSemaListMx.RLock()
-		currentWorkSema := WorkSemaList[id]
-		WorkSemaListMx.RUnlock()
-		currentWorkSema.Post()
-
-		WorkSema.Post()
-
-		TopicsMx.RLock()
-		topicChan := Topics[id]
-		TopicsMx.RUnlock()
-		topicChan <- work
+		//WorkSemaListMx.RLock()
+		//currentWorkSema := WorkSemaList[id]
+		//WorkSemaListMx.RUnlock()
+		//currentWorkSema.Post()
+		//
+		//WorkSema.Post()
+		//
+		//TopicsMx.RLock()
+		//topicChan := Topics[id]
+		//TopicsMx.RUnlock()
+		//topicChan <- work
+		WorkChan <- work
 	}
-	//WorkMutex.RUnlock()
-	//time.Sleep(500 * time.Millisecond)
-	//
-	//for len(WorkList) > 0 {
-	//	WorkMutex.RLock()
-	//	for _, work := range WorkList {
-	//		Topics["1"] <- work
-	//	}
-	//	WorkMutex.RUnlock()
-	//	time.Sleep(500 * time.Millisecond)
-	//}
 }
 
 func checkWork(v variables) {
@@ -165,19 +155,19 @@ func reply(v variables) {
 }
 
 func closeHandler(id string) {
-	TopicsMx.Lock()
-	close(Topics[id])
-	delete(Topics, id)
-	TopicsMx.Unlock()
+	//TopicsMx.Lock()
+	//close(Topics[id])
+	//delete(Topics, id)
+	//TopicsMx.Unlock()
 
 	BufferMx.Lock()
 	close(Buffers[id])
 	delete(Buffers, id)
 	BufferMx.Unlock()
 
-	WorkSemaListMx.Lock()
-	delete(WorkSemaList, id)
-	WorkSemaListMx.Unlock()
+	//WorkSemaListMx.Lock()
+	//delete(WorkSemaList, id)
+	//WorkSemaListMx.Unlock()
 
 	EventChannelsMx.Lock()
 	delete(EventChannels, id)
@@ -222,40 +212,26 @@ func HandleTask(req stubs.PublishTask, res *stubs.GolResultReport, id string) (e
 	//Task Cycle
 	for v.completeTurn = 0; !v.closed && v.completeTurn < req.Turns; {
 		//Split One big task into several small tasks
-		fmt.Println("1?")
 		v.WorkList = workSplit(v)
-		fmt.Println("1")
 		//Record the number of work been send
-		fmt.Println("2?")
 		v.WorkNum = len(v.WorkList)
-		fmt.Println("2")
 		//Post Work
-		fmt.Println("3?")
 		postWork(v.WorkList, v.id)
-		fmt.Println("3")
-		fmt.Println("4?")
+
 		workSender(v.WorkList, v.id)
-		fmt.Println("4")
-		fmt.Println("5?")
 		checkWork(v)
-		fmt.Println("5")
 		//res.ResultMap = CalculatingWorld
-		fmt.Println("6?")
 		v.worldMx.Lock()
 		v.CompleteWorld = v.CalculatingWorld
 		v.completeTurn++
 		v.worldMx.Unlock()
-		fmt.Println("6")
 		v.CalculatingWorld = make([][]byte, len(v.CompleteWorld))
 		//for i := 0; i < len(v.CompleteWorld); i++ {
 		//	v.CalculatingWorld[i] = make([]byte, len(v.CompleteWorld[i]))
 		//}
-		fmt.Println("那tm的问题在哪里?")
 	}
 	//Response to Request
-	fmt.Println("你有问题?")
 	reply(v)
-	fmt.Println("对不起")
 
 	v.eventChan <- HandlerLoopStopEvent{Cmd: HandlerLoopStop}
 	return

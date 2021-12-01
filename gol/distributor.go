@@ -136,6 +136,6 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	}
 
 	turn = 0
-	SDLWorkFlow(keyPressed, id)
-	//DistributedWorkFlow(keyPressed, id)
+	//SDLWorkFlow(keyPressed, id)
+	DistributedWorkFlow(keyPressed, id)
 }

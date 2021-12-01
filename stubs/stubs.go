@@ -1,5 +1,6 @@
 package stubs
 
+
 var WorkerCalculate = "Worker.Calculate"
 var DistributorPublish = "Broker.HandleTask"
 var WorkerSubscribe = "Broker.Subscribe"
@@ -11,13 +12,11 @@ type Cell struct {
 	X, Y int
 }
 
-//Rule: every task published by client.GO
-// 		every result returned by client.Call
 
-type Response struct {
-	Result [][]byte
-}
+//Stubs Here are appear in pairs, if one request do not need response, use StatusReport as response.
 
+
+//Request
 // Distributor -> Broker ( publish task )
 type PublishTask struct {
 	ID          string
@@ -26,12 +25,7 @@ type PublishTask struct {
 	ImageWidth  int
 	ImageHeight int
 }
-
-type Subscribe struct {
-	WorkerAddr string
-	Callback   string
-}
-
+//Response
 // response for Gol result request
 type GolResultReport struct {
 	StartX       int
@@ -42,6 +36,14 @@ type GolResultReport struct {
 	CompleteTurn int
 }
 
+//Request, responded by StatusReport
+type Subscribe struct {
+	WorkerAddr string
+	Callback   string
+}
+
+
+//Request, responded by GolResultReport
 // request for Gol result request
 type Work struct {
 	Turns        int
@@ -55,28 +57,41 @@ type Work struct {
 	Owner        string
 }
 
-type StatusReport struct {
-	Msg string
-}
-
+//Respond
+//TODO : Still unimplemented
 type SdlUpdate struct {
 	TurnComplete int
 	flipCells    []Cell
 }
 
+//Request, responede by RespondCurrentWorld
+//Request for last calculated world by ID
 type RequestCurrentWorld struct {
 	ID string
 }
 
+//Response
 type RespondCurrentWorld struct {
 	World [][]byte
 	Turn  int
 }
 
+//Request
+//Send when you want to close entire system
 type Kill struct {
 	Msg string
 }
 
+//Request
+//Send if you want to quit before get result
+//Recommended but not compulsory, save calculation power.
 type WorkStop struct {
 	Id string
+}
+
+
+//Response
+// If you don't need Response, use this as response interface.
+type StatusReport struct {
+	Msg string
 }

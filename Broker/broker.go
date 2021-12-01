@@ -19,24 +19,24 @@ func (b *Broker) HandleTask(req stubs.PublishTask, res *stubs.GolResultReport) (
 	id := req.ID
 	fmt.Println(id)
 
-	if _, ok := BrokerService.Topics[id]; ok {
+	if _, ok := BrokerService.Buffers[id]; ok {
 		return &BrokerService.ChannelExist{}
 	}
 
-	//Initialize Topics
-	BrokerService.TopicsMx.Lock()
-	BrokerService.Topics[id] = make(chan stubs.Work, 1)
-	BrokerService.TopicsMx.Unlock()
+	////Initialize Topics
+	//BrokerService.TopicsMx.Lock()
+	//BrokerService.Topics[id] = make(chan stubs.Work, 1)
+	//BrokerService.TopicsMx.Unlock()
 
 	//Initialize Buffers
 	BrokerService.BufferMx.Lock()
 	BrokerService.Buffers[id] = make(chan *stubs.GolResultReport, 1)
 	BrokerService.BufferMx.Unlock()
-
-	//Initialize WorkSemaList
-	BrokerService.WorkSemaListMx.Lock()
-	BrokerService.WorkSemaList[id] = semaphore.Init(1, 0)
-	BrokerService.WorkSemaListMx.Unlock()
+	//
+	////Initialize WorkSemaList
+	//BrokerService.WorkSemaListMx.Lock()
+	//BrokerService.WorkSemaList[id] = semaphore.Init(1, 0)
+	//BrokerService.WorkSemaListMx.Unlock()
 
 	//Initialize EventChannel
 	BrokerService.EventChannelsMx.Lock()
@@ -73,17 +73,15 @@ func (b *Broker) Getmap(req stubs.RequestCurrentWorld, res *stubs.RespondCurrent
 	fmt.Println("Receive Request")
 	fmt.Println(req.ID)
 
-	if _, ok := BrokerService.Topics[req.ID]; ok {
+	if _, ok := BrokerService.Buffers[req.ID]; !ok {
 		return
 	}
 
 	resultChan := make(chan BrokerService.CurrentWorld, 1)
-	fmt.Println("原来问题在这里?")
 	BrokerService.EventChannelsMx.RLock()
 	tempChan := BrokerService.EventChannels[req.ID]
-	tempChan <- BrokerService.GetMapEvent{BrokerService.GetMap, resultChan}
 	BrokerService.EventChannelsMx.RUnlock()
-	fmt.Println("原来不在这里?")
+	tempChan <- BrokerService.GetMapEvent{BrokerService.GetMap, resultChan}
 
 	result := <-resultChan
 
@@ -98,17 +96,17 @@ func (b *Broker) Getmap(req stubs.RequestCurrentWorld, res *stubs.RespondCurrent
 
 //Broker initialization
 func initializeBroker() {
-	BrokerService.Topics = map[string]chan stubs.Work{}
-	BrokerService.TopicsMx = sync.RWMutex{}
+	//BrokerService.Topics = map[string]chan stubs.Work{}
+	//BrokerService.TopicsMx = sync.RWMutex{}
 
 	BrokerService.Buffers = map[string]chan *stubs.GolResultReport{}
 	BrokerService.BufferMx = sync.RWMutex{}
 
-	BrokerService.WorkSemaList = map[string]semaphore.Semaphore{}
-	BrokerService.WorkSemaListMx = sync.RWMutex{}
+	//BrokerService.WorkSemaList = map[string]semaphore.Semaphore{}
+	//BrokerService.WorkSemaListMx = sync.RWMutex{}
 
 	BrokerService.EventChannels = map[string]chan BrokerService.EventRequest{}
-	BrokerService.WorkSemaListMx = sync.RWMutex{}
+	//BrokerService.WorkSemaListMx = sync.RWMutex{}
 
 	BrokerService.Subscribers = map[string]*rpc.Client{}
 
@@ -140,7 +138,7 @@ func quitBroker() {
 func main() {
 
 	initializeBroker()
-	go BrokerService.WorkDistributor()
+	//go BrokerService.WorkDistributor()
 	pAddr := flag.String("port", "8030", "Port to listen on")
 	flag.Parse()
 	rpc.Register(&Broker{})
