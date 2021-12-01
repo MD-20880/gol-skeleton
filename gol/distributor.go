@@ -105,10 +105,10 @@ ________________________________________
 */
 func updateTurn(chans []chan [][]byte, v *Variables) [][]byte {
 	var newWorld [][]byte
-	for i := 0; i < v.p.Threads-1; i++ {
+	for i := 0; i < v.p.Threads; i++ {
 		go StartWorker(v.p, v.world, i*v.p.ImageHeight/v.p.Threads, 0, (i+1)*v.p.ImageHeight/v.p.Threads, v.p.ImageWidth, chans[i])
 	}
-	go StartWorker(v.p, v.world, (v.p.Threads-1)*v.p.ImageHeight/v.p.Threads, 0, v.p.ImageHeight, v.p.ImageWidth, chans[v.p.Threads-1])
+	//go StartWorker(v.p, v.world, (v.p.Threads-1)*v.p.ImageHeight/v.p.Threads, 0, v.p.ImageHeight, v.p.ImageWidth, chans[v.p.Threads-1])
 
 	for i := range chans {
 		tempStore := <-chans[i]
