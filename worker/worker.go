@@ -18,6 +18,8 @@ type Params struct {
 	ImageHeight int
 }
 
+var Threads int
+
 func GetOutboundIP() net.IP {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
@@ -96,7 +98,26 @@ func calculateHelper(x int, y int, oldWorld *[][]byte, xmap [3]int, ymap [3]int,
 }
 
 func StartWorker(p Params, world [][]byte, startX int, startY int, endX int, endY int, resultChan chan [][]byte) {
-	calculateNextState(p, world, startX, startY, endX, endY, resultChan)
+	chans := make([]chan [][]byte, Threads)
+	for i := 0; i < Threads; i++ {
+		chans[i] = make(chan [][]byte)
+		go calculateNextState(p, world, startX, i*(endY-startY)/Threads, endX, (i+1)*(endY-startY)/Threads, chans[i])
+	}
+	newWorld := make([][][]byte, Threads)
+	for i := 0; i < Threads; i++ {
+		newWorld[i] = <-chans[i]
+	}
+
+	resultWorld := make([][]byte, endX-startX)
+	for i := 0; i < endX-startX; i++ {
+		for j := 0; j < Threads; j++ {
+			resultWorld[i] = append(resultWorld[i], newWorld[j][i]...)
+		}
+	}
+
+	resultChan <- resultWorld
+
+	//calculateNextState(p, world, startX, startY, endX, endY, resultChan)
 }
 
 type Worker struct {
@@ -146,9 +167,16 @@ func subscribeBroker(bAddr string, pAddr string) {
 
 func main() {
 	pAddr := flag.String("port", "8030", "Port to listen on")
-	//bAddr := flag.String("broker", "127.0.0.1:8030", "Port to listen on")
-	bAddr := flag.String("broker", "3.82.148.15:8030", "Port to listen on")
+	bAddr := flag.String("broker", "127.0.0.1:8030", "Port to listen on")
+	threads := flag.String("core", "4", "Threads you want to run on this server")
+	//bAddr := flag.String("broker", "3.82.148.15:8030", "Port to listen on")
 	flag.Parse()
+	thread, err := strconv.Atoi(*threads)
+	if err != nil {
+		fmt.Println("Threads must be a number")
+		os.Exit(20)
+	}
+	Threads = thread
 	rpc.Register(&Worker{})
 	listener, err := net.Listen("tcp", ":"+*pAddr)
 	for err != nil {
