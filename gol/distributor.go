@@ -106,7 +106,8 @@ ________________________________________
 func updateTurn(chans []chan [][]byte, v *Variables) [][]byte {
 	var newWorld [][]byte
 	for i := 0; i < v.p.Threads; i++ {
-		go StartWorker(v.p, v.world, i*v.p.ImageHeight/v.p.Threads, 0, (i+1)*v.p.ImageHeight/v.p.Threads, v.p.ImageWidth, chans[i])
+		temp := i * v.p.ImageHeight
+		go StartWorker(v.p, v.world, temp/v.p.Threads, 0, (temp+v.p.ImageHeight)/v.p.Threads, v.p.ImageWidth, chans[i])
 	}
 	//go StartWorker(v.p, v.world, (v.p.Threads-1)*v.p.ImageHeight/v.p.Threads, 0, v.p.ImageHeight, v.p.ImageWidth, chans[v.p.Threads-1])
 
@@ -269,10 +270,10 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 		for j := range flipCells {
 			v.c.events <- CellFlipped{v.turn, flipCells[j]}
 		}
+		v.mutex.Lock()
 		v.c.events <- TurnComplete{CompletedTurns: v.turn}
 
 		//Update World info and protect it by mutex lock
-		v.mutex.Lock()
 		v.world = v.newWorld
 		v.turn = i
 		v.mutex.Unlock()
