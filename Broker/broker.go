@@ -69,6 +69,28 @@ func (b *Broker) Subscribe(req stubs.Subscribe, res *stubs.StatusReport) (err er
 	return
 }
 
+func (b *Broker) GetCells(req stubs.RequestCurrentCells, res *stubs.RespondCurrentCell) (err error) {
+	fmt.Println("Receive Request")
+	fmt.Println(req.ID)
+
+	if _, ok := BrokerService.Buffers[req.ID]; !ok {
+		return
+	}
+
+	resultChan := make(chan BrokerService.CurrentWorld, 1)
+	BrokerService.EventChannelsMx.RLock()
+	tempChan := BrokerService.EventChannels[req.ID]
+	BrokerService.EventChannelsMx.RUnlock()
+	tempChan <- BrokerService.GetMapEvent{BrokerService.GetMap, resultChan}
+
+	result := <-resultChan
+
+	res.Cells = BrokerService.CalculateAliveCells(result.World)
+	res.Turn = result.Turn
+	return
+
+}
+
 func (b *Broker) Getmap(req stubs.RequestCurrentWorld, res *stubs.RespondCurrentWorld) (err error) {
 	fmt.Println("Receive Request")
 	fmt.Println(req.ID)
@@ -85,9 +107,6 @@ func (b *Broker) Getmap(req stubs.RequestCurrentWorld, res *stubs.RespondCurrent
 
 	result := <-resultChan
 
-	if len(result.World) == 0 {
-		os.Exit(100)
-	}
 	res.World = result.World
 	res.Turn = result.Turn
 	return

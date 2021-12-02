@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
 var Counter int
@@ -20,4 +21,16 @@ func IdGenerator() (id string) {
 	assginMutex.Unlock()
 
 	return
+}
+
+func CalculateAliveCells(world [][]byte) []stubs.Cell {
+	var cells = []stubs.Cell{}
+	for j, _ := range world {
+		for i, num := range world[j] {
+			if num == 255 {
+				cells = append(cells, stubs.Cell{i, j})
+			}
+		}
+	}
+	return cells
 }

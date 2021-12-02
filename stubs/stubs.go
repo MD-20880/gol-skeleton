@@ -1,20 +1,19 @@
 package stubs
 
-
 var WorkerCalculate = "Worker.Calculate"
 var DistributorPublish = "Broker.HandleTask"
 var WorkerSubscribe = "Broker.Subscribe"
 var KillBroker = "Broker.Kill"
 var KillWorker = "Worker.Kill"
 var KillHandler = "Broker.StopWork"
+var GetMap = "Broker.Getmap"
+var GetCells = "Broker.GetCells"
 
 type Cell struct {
 	X, Y int
 }
 
-
 //Stubs Here are appear in pairs, if one request do not need response, use StatusReport as response.
-
 
 //Request
 // Distributor -> Broker ( publish task )
@@ -25,6 +24,7 @@ type PublishTask struct {
 	ImageWidth  int
 	ImageHeight int
 }
+
 //Response
 // response for Gol result request
 type GolResultReport struct {
@@ -41,7 +41,6 @@ type Subscribe struct {
 	WorkerAddr string
 	Callback   string
 }
-
 
 //Request, responded by GolResultReport
 // request for Gol result request
@@ -76,6 +75,17 @@ type RespondCurrentWorld struct {
 	Turn  int
 }
 
+//Request, responded by RespondCurrentCell
+//Request for last calculated world's alive cells
+type RequestCurrentCells struct {
+	ID string
+}
+
+type RespondCurrentCell struct {
+	Cells []Cell
+	Turn  int
+}
+
 //Request
 //Send when you want to close entire system
 type Kill struct {
@@ -88,7 +98,6 @@ type Kill struct {
 type WorkStop struct {
 	Id string
 }
-
 
 //Response
 // If you don't need Response, use this as response interface.

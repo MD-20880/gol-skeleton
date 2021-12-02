@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -55,6 +56,17 @@ func readfile(path string) bufio.Scanner {
 	scanner := bufio.NewScanner(file)
 	return *scanner
 
+}
+
+func ReceiveMap(cells []stubs.Cell) [][]byte {
+	resultWorld := make([][]byte, p.ImageHeight)
+	for i := range resultWorld {
+		resultWorld[i] = make([]byte, p.ImageWidth)
+	}
+	for _, i := range cells {
+		resultWorld[i.X][i.Y] = 255
+	}
+	return resultWorld
 }
 
 //This function Work just well
@@ -136,6 +148,6 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 	}
 
 	turn = 0
-	SDLWorkFlow(keyPressed, id)
-	//DistributedWorkFlow(keyPressed, id)
+	//SDLWorkFlow(keyPressed, id)
+	DistributedWorkFlow(keyPressed, id)
 }

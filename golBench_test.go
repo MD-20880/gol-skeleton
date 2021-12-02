@@ -9,10 +9,10 @@ import (
 
 func BenchmarkGol(b *testing.B) {
 	os.Stdout = nil
-	p := gol.Params{ImageWidth: 5120, ImageHeight: 5120, Turns: 50}
+	p := gol.Params{ImageWidth: 512, ImageHeight: 512, Turns: 10}
 
 	//Height ,Width ,Turns ,#Workers ,Threads on each worker
-	testName := fmt.Sprintf("%dx%dx%dx%dx%d", p.ImageWidth, p.ImageHeight, p.Turns, 4, 2)
+	testName := fmt.Sprintf("%dx%dx%dx%dx%d", p.ImageWidth, p.ImageHeight, p.Turns, 1, 4)
 	b.Run(testName, func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			events := make(chan gol.Event)
