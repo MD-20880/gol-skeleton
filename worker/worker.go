@@ -98,26 +98,29 @@ func calculateHelper(x int, y int, oldWorld *[][]byte, xmap [3]int, ymap [3]int,
 }
 
 func StartWorker(p Params, world [][]byte, startX int, startY int, endX int, endY int, resultChan chan [][]byte) {
-	chans := make([]chan [][]byte, Threads)
-	for i := 0; i < Threads; i++ {
-		chans[i] = make(chan [][]byte)
-		go calculateNextState(p, world, startX, i*(endY-startY)/Threads, endX, (i+1)*(endY-startY)/Threads, chans[i])
-	}
-	newWorld := make([][][]byte, Threads)
-	for i := 0; i < Threads; i++ {
-		newWorld[i] = <-chans[i]
-	}
 
-	resultWorld := make([][]byte, endX-startX)
-	for i := 0; i < endX-startX; i++ {
-		for j := 0; j < Threads; j++ {
-			resultWorld[i] = append(resultWorld[i], newWorld[j][i]...)
+	if Threads == 1 {
+		calculateNextState(p, world, startX, startY, endX, endY, resultChan)
+	} else {
+		chans := make([]chan [][]byte, Threads)
+		for i := 0; i < Threads; i++ {
+			chans[i] = make(chan [][]byte)
+			go calculateNextState(p, world, startX, i*(endY-startY)/Threads, endX, (i+1)*(endY-startY)/Threads, chans[i])
 		}
+		newWorld := make([][][]byte, Threads)
+		for i := 0; i < Threads; i++ {
+			newWorld[i] = <-chans[i]
+		}
+
+		resultWorld := make([][]byte, endX-startX)
+		for i := 0; i < endX-startX; i++ {
+			for j := 0; j < Threads; j++ {
+				resultWorld[i] = append(resultWorld[i], newWorld[j][i]...)
+			}
+		}
+
+		resultChan <- resultWorld
 	}
-
-	resultChan <- resultWorld
-
-	//calculateNextState(p, world, startX, startY, endX, endY, resultChan)
 }
 
 type Worker struct {
