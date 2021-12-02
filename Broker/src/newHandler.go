@@ -182,7 +182,6 @@ LOOP:
 	for {
 		fmt.Println(v.id)
 		event := <-v.eventChan
-		fmt.Println("0")
 		switch event.Command() {
 		case GetMap:
 			resultChan := event.(GetMapEvent).SendBack
