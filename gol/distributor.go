@@ -109,7 +109,6 @@ func updateTurn(chans []chan [][]byte, v *Variables) [][]byte {
 		temp := i * v.p.ImageHeight
 		go StartWorker(v.p, v.world, temp/v.p.Threads, 0, (temp+v.p.ImageHeight)/v.p.Threads, v.p.ImageWidth, chans[i])
 	}
-	//go StartWorker(v.p, v.world, (v.p.Threads-1)*v.p.ImageHeight/v.p.Threads, 0, v.p.ImageHeight, v.p.ImageWidth, chans[v.p.Threads-1])
 
 	for i := range chans {
 		tempStore := <-chans[i]
@@ -272,7 +271,6 @@ func distributor(params Params, channels distributorChannels, avail *channelAvai
 		}
 		v.mutex.Lock()
 		v.c.events <- TurnComplete{CompletedTurns: v.turn}
-
 		//Update World info and protect it by mutex lock
 		v.world = v.newWorld
 		v.turn = i

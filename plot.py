@@ -19,7 +19,7 @@ benchmark_data['cpu_cores'] = benchmark_data['name'].str.extract('Gol/512x512x50
 print(benchmark_data)
 
 # Plot a bar chart.
-ax = sns.barplot(data=benchmark_data, x='threads', y='time')
+ax = sns.lineplot(data=benchmark_data, x='threads', y='time')
 
 # Set descriptive axis lables.
 ax.set(xlabel='Worker threads used', ylabel='Time taken (s)')

@@ -83,7 +83,3 @@ func calculateHelper(x int, y int, oldWorld *[][]byte, xmap [3]int, ymap [3]int,
 func StartWorker(p Params, world [][]byte, startX int, startY int, endX int, endY int, resultChan chan [][]byte) {
 	calculateNextState(p, world, startX, startY, endX, endY, resultChan)
 }
-
-func main() {
-
-}
