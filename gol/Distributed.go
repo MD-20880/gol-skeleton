@@ -99,6 +99,7 @@ func DistributedWorkFlow(keyPressed <-chan rune, id string) {
 	newWorld = res.ResultMap
 	mutex.Lock()
 	world = newWorld
+	turn = res.CompleteTurn
 	mutex.Unlock()
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
