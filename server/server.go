@@ -4,12 +4,25 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
 type GolOperations struct{}
+
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
+}
 
 func (s *GolOperations) GolWorker(req stubs.BrokerRequest, res *stubs.Response) (err error) {
 	//worlds := createNewWorld(req.ImageHeight, req.ImageWidth)
@@ -27,7 +40,9 @@ func (s *GolOperations) GolWorker(req stubs.BrokerRequest, res *stubs.Response) 
 }
 
 func makeCall(client rpc.Client, pAddr string) {
-	request := stubs.Subscription{Callback: "GolOperations.GolWorker", WorkerAddress: ":" + pAddr}
+	ip := GetOutboundIP()
+	addr := ip.String() + ":" + pAddr
+	request := stubs.Subscription{Callback: "GolOperations.GolWorker", WorkerAddress: addr}
 	response := new(stubs.StatusReport)
 	client.Call(stubs.Subscribe, request, response)
 	fmt.Println(response.Message)

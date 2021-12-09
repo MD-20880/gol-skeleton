@@ -117,17 +117,17 @@ func distributor(p Params, c distributorChannels) {
 
 	go keyPressesAction() // dunno if its okay to put it here
 
-	dAddr := "52.73.239.125"
-	shabi, err := rpc.Dial("tcp", "52.73.239.125:8030")
+	dAddr := "8040"
+	shabi, err := rpc.Dial("tcp", "127.0.0.1:8030")
 	clientBroker = shabi
 	defer shabi.Close()
 	handleError(err)
 	rpc.Register(&Distributor{})
 	listener, err2 := net.Listen("tcp", ":"+dAddr)
-	defer listener.Close()
+	// defer listener.Close()
 	handleError(err2)
 	go rpc.Accept(listener)
-	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: ":" + dAddr}
+	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: "127.0.0.1:" + dAddr}
 	response := new(stubs.Response)
 	clientBroker.Call(stubs.Publish, request, response)
 	// clientBroker.Call(stubs.Distribute, new(stubs.StatusReport), new(stubs.StatusReport))
