@@ -56,7 +56,7 @@ func makeCall(client rpc.Client, pAddr string) {
 
 func main() {
 	pAddr := flag.String("port", "8040", "Port to listen on")
-	brokerAddr := flag.String("broker", "127.0.0.1:8030", "Address of broker instance")
+	brokerAddr := flag.String("broker", "3.92.239.1:8030", "Address of broker instance")
 	flag.Parse()
 	client, err := rpc.Dial("tcp", *brokerAddr)
 	handleError(err)

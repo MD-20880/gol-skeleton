@@ -74,7 +74,8 @@ func keyPressesAction() {
 				//mutex.Unlock()
 			}
 		case 'k':
-			clientBroker.Call(stubs.Kill, new(stubs.StatusReport), new(stubs.StatusReport))
+			// in here I use call so it will wait for the process to finish, need to do go instead, also the pgm thing is so wrong
+			clientBroker.Go(stubs.Kill, new(stubs.StatusReport), new(stubs.StatusReport), nil)
 			outputPgm()
 			os.Exit(1)
 		}
@@ -125,9 +126,10 @@ func distributor(p Params, c distributorChannels) {
 	go keyPressesAction() // dunno if its okay to put it here
 
 	dAddr := "8040"
-	shabi, err := rpc.Dial("tcp", "127.0.0.1:8030")
-	clientBroker = shabi
-	defer shabi.Close()
+	// tempClient, err := rpc.Dial("tcp", "127.0.0.1:8030")
+	tempClient, err := rpc.Dial("tcp", "3.92.239.1:8030")
+	clientBroker = tempClient
+	defer tempClient.Close()
 	handleError(err)
 	rpc.Register(&Distributor{})
 	listener, err2 := net.Listen("tcp", ":"+dAddr)
@@ -138,12 +140,12 @@ func distributor(p Params, c distributorChannels) {
 	response := new(stubs.Response)
 	clientBroker.Call(stubs.Publish, request, response)
 	// clientBroker.Call(stubs.Distribute, new(stubs.StatusReport), new(stubs.StatusReport))
+	globalWorld = response.World
 
 	done <- true
 	//here as well, global v might be problematic
 	event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: CalculateAliveCells(response.World)}
 	c.events <- event
-	globalWorld = response.World
 	outputPgm()
 
 	// Make sure that the Io has finished any output before exiting.
@@ -163,14 +165,6 @@ func (d *Distributor) CheckShit(req stubs.StatusReport, res *stubs.StatusReport)
 	return
 }
 
-//TODO not sure if the global v would cause any troubles
-func makeCall(client rpc.Client, channel chan stubs.Response, length int) {
-	request := stubs.Request{Turns: globalP.Turns, ImageWidth: globalP.ImageWidth, ImageHeight: globalP.ImageHeight, World: globalWorld}
-	response := new(stubs.Response)
-	client.Call(stubs.GolHandler, request, response)
-	channel <- *response
-}
-
 func tickers(event chan<- Event, done chan bool) {
 	//event <- AliveCellsCount{CompletedTurns: turns, CellsCount: countCell()}
 	ticker := time.NewTicker(2 * time.Second)
@@ -179,7 +173,7 @@ func tickers(event chan<- Event, done chan bool) {
 		case <-ticker.C:
 			response := new(stubs.Response)
 			clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
-			globalWorld = response.World
+			// globalWorld = response.World
 			event <- AliveCellsCount{CompletedTurns: response.Turns, CellsCount: countCell(response.World)} // turns haven't been done
 			// find the problem, so when calculating it counts all the points in the world
 			// but maybe when it was counting, the world updated, now it counts the new world therefore the problem
@@ -192,13 +186,10 @@ func tickers(event chan<- Event, done chan bool) {
 // want to refactor later 1. for range 2. could use channel dunno the implications
 func countCell(world1 [][]byte) int {
 
-	mutex.Lock()
-	world := globalWorld
-	mutex.Unlock()
 	count := 0
 	for i := 0; i < globalP.ImageHeight; i++ {
 		for j := 0; j < globalP.ImageWidth; j++ {
-			if world[i][j] == 255 {
+			if world1[i][j] == 255 {
 				count += 1
 			}
 		}
