@@ -1,12 +1,14 @@
 package stubs
 
 var GolHandler = "GolOperations.GolWorker" // somehow has to declare like this
+var KillWorker = "GolOperations.KillWorker"
 var Subscribe = "Broker.Subscribe"
 var Publish = "Broker.Publish"
 var Distribute = "Broker.Distribute"
 var GetWorld = "Broker.GetWorld"
 var CheckShit = "Distributor.CheckShit"
 var Pause = "Broker.Pause"
+var Kill = "Broker.Kill"
 
 // Request this is the same as publishRequest
 // yeah, now I don't think its gonna work, it needs that method directly its not like you can

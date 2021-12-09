@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"os"
 	"sync"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
@@ -127,6 +128,14 @@ func getWorld(req stubs.StatusReport, res *stubs.Response) {
 	Mutex.Unlock()
 }
 
+func killBroker() {
+	Mutex.Lock()
+	for _, client := range GlobalClients {
+		client.Call(stubs.KillWorker, new(stubs.StatusReport), new(stubs.StatusReport))
+	}
+	os.Exit(10)
+}
+
 type Broker struct {
 	World [][]byte
 	Turns int
@@ -157,6 +166,11 @@ func (b *Broker) Pause(req stubs.StatusReport, res *stubs.StatusReport) (err err
 	Mutex.Lock()
 	res.Number = CompletedTurns
 	Mutex.Unlock()
+	return
+}
+
+func (b *Broker) Kill(req stubs.StatusReport, res *stubs.StatusReport) (err error) {
+	go killBroker()
 	return
 }
 

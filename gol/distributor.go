@@ -67,17 +67,21 @@ func keyPressesAction() {
 			response := new(stubs.StatusReport)
 			clientBroker.Call(stubs.Pause, new(stubs.StatusReport), response)
 			fmt.Println(response.Number)
-			mutex.Lock()
+			//mutex.Lock()
 			if <-distributeChannels.keyPresses == 'p' {
 				clientBroker.Call(stubs.Pause, new(stubs.StatusReport), new(stubs.StatusReport))
 				fmt.Println("continuing")
-				mutex.Unlock()
+				//mutex.Unlock()
 			}
-
+		case 'k':
+			clientBroker.Call(stubs.Kill, new(stubs.StatusReport), new(stubs.StatusReport))
+			outputPgm()
+			os.Exit(1)
 		}
 	}
 }
 
+// this is absolutely wrong, but will depends on my mood if i want to fix this
 func outputPgm() {
 	distributeChannels.ioCommand <- ioOutput
 	outputString := strconv.Itoa(globalP.ImageHeight) + "x" + strconv.Itoa(globalP.ImageWidth) + "x" + strconv.Itoa(globalP.Turns)

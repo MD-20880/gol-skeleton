@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"os"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
@@ -36,6 +37,11 @@ func (s *GolOperations) GolWorker(req stubs.BrokerRequest, res *stubs.Response) 
 
 	//res.World = worlds
 	res.World = req.World
+	return
+}
+
+func (s *GolOperations) KillWorker(req stubs.StatusReport, res *stubs.StatusReport) (err error) {
+	os.Exit(10)
 	return
 }
 
