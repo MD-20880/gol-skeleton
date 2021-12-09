@@ -64,9 +64,12 @@ func keyPressesAction() {
 			outputPgm()
 			os.Exit(1) // not sure about this part also do I need to report event or not
 		case 'p':
-			fmt.Println(turns)
+			response := new(stubs.StatusReport)
+			clientBroker.Call(stubs.Pause, new(stubs.StatusReport), response)
+			fmt.Println(response.Number)
 			mutex.Lock()
 			if <-distributeChannels.keyPresses == 'p' {
+				clientBroker.Call(stubs.Pause, new(stubs.StatusReport), new(stubs.StatusReport))
 				fmt.Println("continuing")
 				mutex.Unlock()
 			}
@@ -124,7 +127,7 @@ func distributor(p Params, c distributorChannels) {
 	handleError(err)
 	rpc.Register(&Distributor{})
 	listener, err2 := net.Listen("tcp", ":"+dAddr)
-	// defer listener.Close()
+	defer listener.Close()
 	handleError(err2)
 	go rpc.Accept(listener)
 	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: "127.0.0.1:" + dAddr}

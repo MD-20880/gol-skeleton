@@ -19,6 +19,7 @@ var ImageHeight int
 var DistributorClient *rpc.Client
 var CompletedTurns int
 var Mutex = &sync.Mutex{}
+var pauseChan = make(chan bool)
 
 func createChannels(length int) []chan [][]byte {
 	channels := make([]chan [][]byte, length)
@@ -82,12 +83,23 @@ func checkConnection(channel chan bool) {
 	}
 }
 
+func checkPause(channel chan bool) {
+	for {
+		<-channel
+		Mutex.Lock()
+		<-channel
+		Mutex.Unlock()
+
+	}
+}
+
 func distribute(req stubs.StatusReport, res *stubs.StatusReport) {
 	length := len(GlobalClients)
 	channels := createChannels(length)
 	height := ImageHeight / length
 	channel := make(chan bool)
 	go checkConnection(channel)
+	go checkPause(pauseChan)
 	for i := 0; i < TotalTurns; i++ {
 		j := 0
 		for j < length-1 {
@@ -137,6 +149,14 @@ func (b *Broker) Distribute(req stubs.StatusReport, res *stubs.StatusReport) (er
 
 func (b *Broker) GetWorld(req stubs.StatusReport, res *stubs.Response) (err error) {
 	getWorld(req, res)
+	return
+}
+
+func (b *Broker) Pause(req stubs.StatusReport, res *stubs.StatusReport) (err error) {
+	pauseChan <- true
+	Mutex.Lock()
+	res.Number = CompletedTurns
+	Mutex.Unlock()
 	return
 }
 
