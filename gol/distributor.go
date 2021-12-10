@@ -85,15 +85,17 @@ func keyPressesAction() {
 // this is absolutely wrong, but will depends on my mood if i want to fix this
 func outputPgm() {
 	distributeChannels.ioCommand <- ioOutput
-	outputString := strconv.Itoa(globalP.ImageHeight) + "x" + strconv.Itoa(globalP.ImageWidth) + "x" + strconv.Itoa(globalP.Turns)
+	response := new(stubs.Response)
+	clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
+	outputString := strconv.Itoa(globalP.ImageHeight) + "x" + strconv.Itoa(globalP.ImageWidth) + "x" + strconv.Itoa(response.Turns)
 	distributeChannels.ioFilename <- outputString
-	world := globalWorld
+	world := response.World
 	for i := 0; i < globalP.ImageHeight; i++ {
 		for j := 0; j < globalP.ImageWidth; j++ {
 			distributeChannels.ioOutput <- world[i][j]
 		}
 	}
-	distributeChannels.events <- ImageOutputComplete{CompletedTurns: turns, Filename: outputString}
+	distributeChannels.events <- ImageOutputComplete{CompletedTurns: response.Turns, Filename: outputString}
 }
 
 func readFile() []string {
@@ -126,8 +128,8 @@ func distributor(p Params, c distributorChannels) {
 	go keyPressesAction() // dunno if its okay to put it here
 
 	dAddr := "8040"
-	// tempClient, err := rpc.Dial("tcp", "127.0.0.1:8030")
-	tempClient, err := rpc.Dial("tcp", "3.92.239.1:8030")
+	tempClient, err := rpc.Dial("tcp", "127.0.0.1:8030")
+	// tempClient, err := rpc.Dial("tcp", "3.92.239.1:8030")
 	clientBroker = tempClient
 	defer tempClient.Close()
 	handleError(err)
@@ -139,13 +141,14 @@ func distributor(p Params, c distributorChannels) {
 	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: "127.0.0.1:" + dAddr}
 	response := new(stubs.Response)
 	clientBroker.Call(stubs.Publish, request, response)
-	// clientBroker.Call(stubs.Distribute, new(stubs.StatusReport), new(stubs.StatusReport))
-	globalWorld = response.World
+	//globalWorld = response.World
 
 	done <- true
 	//here as well, global v might be problematic
-	event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: CalculateAliveCells(response.World)}
-	c.events <- event
+	if response.World != nil {
+		event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: CalculateAliveCells(response.World)}
+		c.events <- event
+	}
 	outputPgm()
 
 	// Make sure that the Io has finished any output before exiting.
@@ -184,12 +187,12 @@ func tickers(event chan<- Event, done chan bool) {
 }
 
 // want to refactor later 1. for range 2. could use channel dunno the implications
-func countCell(world1 [][]byte) int {
+func countCell(world [][]byte) int {
 
 	count := 0
 	for i := 0; i < globalP.ImageHeight; i++ {
 		for j := 0; j < globalP.ImageWidth; j++ {
-			if world1[i][j] == 255 {
+			if world[i][j] == 255 {
 				count += 1
 			}
 		}
