@@ -33,8 +33,6 @@ func createWorld() [][]byte {
 	return world
 }
 
-//TODO current state so how about the one is still processing need of mutex lock?
-// buggy code need to get to a lab machine to test it out
 func keyPressesAction() {
 	for {
 		switch <-distributeChannels.keyPresses {
@@ -42,7 +40,7 @@ func keyPressesAction() {
 			outputPgm()
 		case 'q':
 			outputPgm()
-			os.Exit(1) // not sure about this part also do I need to report event or not
+			os.Exit(1)
 		case 'p':
 			fmt.Println(turns)
 			mutex.Lock()
@@ -69,93 +67,18 @@ func outputPgm() {
 	distributeChannels.events <- ImageOutputComplete{CompletedTurns: turns, Filename: outputString}
 }
 
-// distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels) {
-	// step 3 ticker part
-	done := make(chan bool)
-	go tickers(c.events, done)
-	globalP = p
-	globalWorld = createWorld()
-	turns = 0
-	distributeChannels = c
-
-	// step 1 command and filename
-	c.ioCommand <- ioInput
-	string := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
-	c.ioFilename <- string
-
-	for i := range globalWorld {
-		for j := range globalWorld[i] {
-			globalWorld[i][j] = <-c.ioInput
-			if globalWorld[i][j] == 255 {
-				c.events <- CellFlipped{CompletedTurns: turns, Cell: util.Cell{X: j, Y: i}}
-			}
-		}
-	}
-
-	go keyPressesAction()
-
-	channels := createChannels(p)
-	unitLength := p.ImageHeight / p.Threads
-	for i := 0; i < p.Turns; i++ {
-		j := 0
-		for j < p.Threads-1 {
-			go calculateNextState(p, globalWorld, j*unitLength, (j+1)*unitLength, 0, p.ImageWidth, channels[j])
-			j++ // wonder if j++ works
-		}
-		go calculateNextState(p, globalWorld, j*unitLength, p.ImageHeight, 0, p.ImageWidth, channels[p.Threads-1])
-		mutex.Lock()
-		globalWorld = combine(channels, p)
-		mutex.Unlock()
-		turns++
-		//for i := range globalWorld {
-		//	for j := range globalWorld[i] {
-		//
-		//		if globalWorld[i][j] != nextWorld[i][j] {
-		//			c.events <- CellFlipped{CompletedTurns: turns, Cell: util.Cell{X: j, Y: i}}
-		//		}
-		//	}
-		//}
-		//globalWorld = nextWorld
-		c.events <- TurnComplete{CompletedTurns: turns}
-	}
-	done <- true
-	//fmt.Println(globalWorld)
-
-	event := FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, globalWorld)}
-	c.events <- event
-
-	outputPgm()
-	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
-
-	c.events <- StateChange{turns, Quitting}
-
-	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	close(c.events)
-}
-
-func output() {
-
-}
-
 func tickers(event chan<- Event, done chan bool) {
-	//event <- AliveCellsCount{CompletedTurns: turns, CellsCount: countCell()}
 	ticker := time.NewTicker(2 * time.Second)
 	for {
 		select {
 		case <-ticker.C:
 			event <- AliveCellsCount{CompletedTurns: turns, CellsCount: countCell()}
-			// find the problem, so when calculating it counts all the points in the world
-			// but maybe when it was counting, the world updated, now it counts the new world therefore the problem
 		case <-done:
 			return
 		}
 	}
 }
 
-// want to refactor later 1. for range 2. could use channel dunno the implications
 func countCell() int {
 	mutex.Lock()
 	world := globalWorld
@@ -188,6 +111,58 @@ func combine(channels []chan [][]byte, p Params) [][]byte {
 	return ultimateSlice
 }
 
-func worker(p Params, world [][]byte, startY, endY, startX, endX int) {
+// distributor divides the work between workers and interacts with other goroutines.
+func distributor(p Params, c distributorChannels) {
 
+	done := make(chan bool)
+	go tickers(c.events, done)
+	globalP = p
+	globalWorld = createWorld()
+	turns = 0
+	distributeChannels = c
+
+	c.ioCommand <- ioInput
+	string := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
+	c.ioFilename <- string
+
+	for i := range globalWorld {
+		for j := range globalWorld[i] {
+			globalWorld[i][j] = <-c.ioInput
+			if globalWorld[i][j] == 255 {
+				c.events <- CellFlipped{CompletedTurns: turns, Cell: util.Cell{X: j, Y: i}}
+			}
+		}
+	}
+
+	go keyPressesAction()
+
+	channels := createChannels(p)
+	unitLength := p.ImageHeight / p.Threads
+	for i := 0; i < p.Turns; i++ {
+		j := 0
+		for j < p.Threads-1 {
+			go calculateNextState(p, globalWorld, j*unitLength, (j+1)*unitLength, 0, p.ImageWidth, channels[j])
+			j++
+		}
+		go calculateNextState(p, globalWorld, j*unitLength, p.ImageHeight, 0, p.ImageWidth, channels[p.Threads-1])
+		mutex.Lock()
+		globalWorld = combine(channels, p)
+		mutex.Unlock()
+		turns++
+		c.events <- TurnComplete{CompletedTurns: turns}
+	}
+	done <- true
+
+	event := FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, globalWorld)}
+	c.events <- event
+
+	outputPgm()
+	// Make sure that the Io has finished any output before exiting.
+	c.ioCommand <- ioCheckIdle
+	<-c.ioIdle
+
+	c.events <- StateChange{turns, Quitting}
+
+	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+	close(c.events)
 }
