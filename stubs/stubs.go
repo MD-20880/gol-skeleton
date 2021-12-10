@@ -6,7 +6,7 @@ var Subscribe = "Broker.Subscribe"
 var Publish = "Broker.Publish"
 var Distribute = "Broker.Distribute"
 var GetWorld = "Broker.GetWorld"
-var CheckShit = "Distributor.CheckShit"
+var CheckShit = "Distributor.CheckConnection"
 var Pause = "Broker.Pause"
 var Kill = "Broker.Kill"
 

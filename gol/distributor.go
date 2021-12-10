@@ -13,8 +13,6 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-//TODO most important of all, add error handling to it
-// Would had save me tons of time
 type distributorChannels struct {
 	events     chan<- Event
 	ioCommand  chan<- ioCommand
@@ -51,144 +49,11 @@ func getInput(c distributorChannels) {
 
 func handleError(err error) {
 	if err != nil {
-		fmt.Println("shabi ba ni")
+		fmt.Println("something went wrong!")
 	}
 }
 
-func keyPressesAction() {
-	for {
-		switch <-distributeChannels.keyPresses {
-		case 's':
-			outputPgm()
-		case 'q':
-			outputPgm()
-			os.Exit(1) // not sure about this part also do I need to report event or not
-		case 'p':
-			response := new(stubs.StatusReport)
-			clientBroker.Call(stubs.Pause, new(stubs.StatusReport), response)
-			fmt.Println(response.Number)
-			//mutex.Lock()
-			if <-distributeChannels.keyPresses == 'p' {
-				clientBroker.Call(stubs.Pause, new(stubs.StatusReport), new(stubs.StatusReport))
-				fmt.Println("continuing")
-				//mutex.Unlock()
-			}
-		case 'k':
-			// in here I use call so it will wait for the process to finish, need to do go instead, also the pgm thing is so wrong
-			clientBroker.Go(stubs.Kill, new(stubs.StatusReport), new(stubs.StatusReport), nil)
-			outputPgm()
-			os.Exit(1)
-		}
-	}
-}
-
-// this is absolutely wrong, but will depends on my mood if i want to fix this
-func outputPgm() {
-	distributeChannels.ioCommand <- ioOutput
-	response := new(stubs.Response)
-	clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
-	outputString := strconv.Itoa(globalP.ImageHeight) + "x" + strconv.Itoa(globalP.ImageWidth) + "x" + strconv.Itoa(response.Turns)
-	distributeChannels.ioFilename <- outputString
-	world := response.World
-	for i := 0; i < globalP.ImageHeight; i++ {
-		for j := 0; j < globalP.ImageWidth; j++ {
-			distributeChannels.ioOutput <- world[i][j]
-		}
-	}
-	distributeChannels.events <- ImageOutputComplete{CompletedTurns: response.Turns, Filename: outputString}
-}
-
-func readFile() []string {
-	f, err := os.Open("serverList")
-	handleError(err)
-	slice := make([]string, 2)
-	scanner := bufio.NewScanner(f)
-	i := 0
-	for scanner.Scan() {
-		slice[i] = scanner.Text()
-	}
-	return slice
-}
-
-// distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels) {
-	done := make(chan bool)
-	go tickers(c.events, done)
-	globalP = p
-	globalWorld = createWorld()
-	turns = 0 // default is 0 I think
-	distributeChannels = c
-
-	c.ioCommand <- ioInput
-	string := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
-	c.ioFilename <- string
-
-	getInput(c)
-
-	go keyPressesAction() // dunno if its okay to put it here
-
-	dAddr := "8040"
-	tempClient, err := rpc.Dial("tcp", "127.0.0.1:8030")
-	// tempClient, err := rpc.Dial("tcp", "3.92.239.1:8030")
-	clientBroker = tempClient
-	defer tempClient.Close()
-	handleError(err)
-	rpc.Register(&Distributor{})
-	listener, err2 := net.Listen("tcp", ":"+dAddr)
-	defer listener.Close()
-	handleError(err2)
-	go rpc.Accept(listener)
-	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: "127.0.0.1:" + dAddr}
-	response := new(stubs.Response)
-	clientBroker.Call(stubs.Publish, request, response)
-	//globalWorld = response.World
-
-	done <- true
-	//here as well, global v might be problematic
-	if response.World != nil {
-		event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: CalculateAliveCells(response.World)}
-		c.events <- event
-	}
-	outputPgm()
-
-	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
-
-	c.events <- StateChange{turns, Quitting}
-
-	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	close(c.events)
-}
-
-type Distributor struct{}
-
-func (d *Distributor) CheckShit(req stubs.StatusReport, res *stubs.StatusReport) (err error) {
-	res.Message = "zhu"
-	return
-}
-
-func tickers(event chan<- Event, done chan bool) {
-	//event <- AliveCellsCount{CompletedTurns: turns, CellsCount: countCell()}
-	ticker := time.NewTicker(2 * time.Second)
-	for {
-		select {
-		case <-ticker.C:
-			response := new(stubs.Response)
-			clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
-			// globalWorld = response.World
-			event <- AliveCellsCount{CompletedTurns: response.Turns, CellsCount: countCell(response.World)} // turns haven't been done
-			// find the problem, so when calculating it counts all the points in the world
-			// but maybe when it was counting, the world updated, now it counts the new world therefore the problem
-		case <-done:
-			return
-		}
-	}
-}
-
-// want to refactor later 1. for range 2. could use channel dunno the implications
 func countCell(world [][]byte) int {
-
 	count := 0
 	for i := 0; i < globalP.ImageHeight; i++ {
 		for j := 0; j < globalP.ImageWidth; j++ {
@@ -213,4 +78,132 @@ func CalculateAliveCells(world [][]byte) []util.Cell {
 		}
 	}
 	return container
+}
+
+// keyPresses, for p and k, a rpc call to one of broker's method to make it work distributedly
+func keyPressesAction() {
+	for {
+		switch <-distributeChannels.keyPresses {
+		case 's':
+			outputPgm()
+		case 'q':
+			outputPgm()
+			os.Exit(1)
+		case 'p':
+			response := new(stubs.StatusReport)
+			clientBroker.Call(stubs.Pause, new(stubs.StatusReport), response)
+			fmt.Println(response.Number)
+			if <-distributeChannels.keyPresses == 'p' {
+				clientBroker.Call(stubs.Pause, new(stubs.StatusReport), new(stubs.StatusReport))
+				fmt.Println("continuing")
+			}
+		case 'k':
+			clientBroker.Go(stubs.Kill, new(stubs.StatusReport), new(stubs.StatusReport), nil)
+			outputPgm()
+			os.Exit(1)
+		}
+	}
+}
+
+// send aliveCellCount every 2 seconds
+func tickers(event chan<- Event, done chan bool) {
+	ticker := time.NewTicker(2 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			response := new(stubs.Response)
+			clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
+			event <- AliveCellsCount{CompletedTurns: response.Turns, CellsCount: countCell(response.World)}
+		case <-done:
+			return
+		}
+	}
+}
+
+// output the pgm file with the current state
+func outputPgm() {
+	distributeChannels.ioCommand <- ioOutput
+	response := new(stubs.Response)
+	clientBroker.Call(stubs.GetWorld, new(stubs.StatusReport), response)
+	outputString := strconv.Itoa(globalP.ImageHeight) + "x" + strconv.Itoa(globalP.ImageWidth) + "x" + strconv.Itoa(response.Turns)
+	distributeChannels.ioFilename <- outputString
+	world := response.World
+	for i := 0; i < globalP.ImageHeight; i++ {
+		for j := 0; j < globalP.ImageWidth; j++ {
+			distributeChannels.ioOutput <- world[i][j]
+		}
+	}
+	distributeChannels.events <- ImageOutputComplete{CompletedTurns: response.Turns, Filename: outputString}
+}
+
+// was a useful function in previous versions
+func readFile() []string {
+	f, err := os.Open("serverList")
+	handleError(err)
+	slice := make([]string, 2)
+	scanner := bufio.NewScanner(f)
+	i := 0
+	for scanner.Scan() {
+		slice[i] = scanner.Text()
+	}
+	return slice
+}
+
+// distributor publish work and make connections and calls to the broker
+// as well as interacting with other goroutines.
+func distributor(p Params, c distributorChannels) {
+
+	// preparation work
+	done := make(chan bool)
+	go tickers(c.events, done)
+	go keyPressesAction()
+	globalP = p
+	globalWorld = createWorld()
+	turns = 0 // default is 0 I think
+	distributeChannels = c
+
+	c.ioCommand <- ioInput
+	string := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
+	c.ioFilename <- string
+	getInput(c)
+
+	// making connection to the broker
+	dAddr := "8040"
+	tempClient, err := rpc.Dial("tcp", "127.0.0.1:8030")
+	// tempClient, err := rpc.Dial("tcp", "3.92.239.1:8030")
+	clientBroker = tempClient
+	defer tempClient.Close()
+	handleError(err)
+	rpc.Register(&Distributor{})
+	listener, err2 := net.Listen("tcp", ":"+dAddr)
+	defer listener.Close()
+	handleError(err2)
+	go rpc.Accept(listener)
+
+	// making rpc call to the broker to publish all its work
+	request := stubs.Request{Turns: p.Turns, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight, World: globalWorld, Address: "127.0.0.1:" + dAddr}
+	response := new(stubs.Response)
+	clientBroker.Call(stubs.Publish, request, response)
+
+	// standardised stuffs
+	done <- true
+	if response.World != nil {
+		event := FinalTurnComplete{CompletedTurns: globalP.Turns, Alive: CalculateAliveCells(response.World)}
+		c.events <- event
+	}
+	outputPgm()
+	// Make sure that the Io has finished any output before exiting.
+	c.ioCommand <- ioCheckIdle
+	<-c.ioIdle
+	c.events <- StateChange{turns, Quitting}
+	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+	close(c.events)
+}
+
+type Distributor struct{}
+
+// CheckConnection two-way rpc calls, to check if the connection is still on
+func (d *Distributor) CheckConnection(req stubs.StatusReport, res *stubs.StatusReport) (err error) {
+	res.Message = "zhu"
+	return
 }
