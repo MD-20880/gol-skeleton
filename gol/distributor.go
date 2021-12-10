@@ -77,7 +77,7 @@ func distributor(p Params, c distributorChannels) {
 	globalP = p
 	globalWorld = createWorld()
 	turns = 0
-	//distributeChannels = c
+	distributeChannels = c
 
 	// step 1 command and filename
 	c.ioCommand <- ioInput
@@ -93,7 +93,7 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-	//go keyPressesAction()
+	go keyPressesAction()
 
 	channels := createChannels(p)
 	unitLength := p.ImageHeight / p.Threads
@@ -106,8 +106,8 @@ func distributor(p Params, c distributorChannels) {
 		go calculateNextState(p, globalWorld, j*unitLength, p.ImageHeight, 0, p.ImageWidth, channels[p.Threads-1])
 		mutex.Lock()
 		globalWorld = combine(channels, p)
-		turns++
 		mutex.Unlock()
+		turns++
 		//for i := range globalWorld {
 		//	for j := range globalWorld[i] {
 		//
@@ -124,17 +124,8 @@ func distributor(p Params, c distributorChannels) {
 
 	event := FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, globalWorld)}
 	c.events <- event
-	c.ioCommand <- ioOutput
-	outputString := strconv.Itoa(globalP.ImageHeight) + "x" + strconv.Itoa(globalP.ImageWidth) + "x" + strconv.Itoa(globalP.Turns)
-	c.ioFilename <- outputString
-	world := globalWorld
-	for i := 0; i < globalP.ImageHeight; i++ {
-		for j := 0; j < globalP.ImageWidth; j++ {
-			c.ioOutput <- world[i][j]
-		}
-	}
-	c.events <- ImageOutputComplete{CompletedTurns: turns, Filename: outputString}
-	//outputPgm()
+
+	outputPgm()
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle

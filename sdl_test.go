@@ -33,6 +33,7 @@ func TestMain(m *testing.M) {
 	}()
 	// sdl.Run(p, sdlEvents, nil)
 	var w *sdl.Window = nil
+	fmt.Println(*noVis)
 	if !(*noVis) {
 		w = sdl.NewWindow(int32(p.ImageWidth), int32(p.ImageHeight))
 	}
