@@ -169,8 +169,8 @@ func distributor(p Params, c distributorChannels) {
 
 	// making connection to the broker
 	dAddr := "8040"
-	tempClient, err := rpc.Dial("tcp", "127.0.0.1:8030")
-	// tempClient, err := rpc.Dial("tcp", "3.92.239.1:8030")
+	//tempClient, err := rpc.Dial("tcp", "127.0.0.1:8030")
+	tempClient, err := rpc.Dial("tcp", "184.73.70.65:8030")
 	clientBroker = tempClient
 	defer tempClient.Close()
 	handleError(err)
