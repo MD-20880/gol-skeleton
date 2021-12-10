@@ -10,7 +10,6 @@ import (
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
-// could be problemetic when dealing with tests
 var GolHandler string
 var GlobalClients []*rpc.Client
 var World [][]byte
@@ -45,7 +44,7 @@ func calling(i int, req stubs.BrokerRequest, channel chan [][]byte) {
 	channel <- res.World
 }
 
-// subscribe needs to dial the address
+// subscribe needs to dial the worker addresses
 func subscribe(req stubs.Subscription, res *stubs.StatusReport) {
 	client, err := rpc.Dial("tcp", req.WorkerAddress)
 	GlobalClients = append(GlobalClients, client)
@@ -56,12 +55,13 @@ func subscribe(req stubs.Subscription, res *stubs.StatusReport) {
 	res.Message = "connection successful"
 }
 
+// publish dials distributor's address and pass the world to the distribute function
 func publish(req stubs.Request, res *stubs.Response) {
 	World = req.World
 	TotalTurns = req.Turns
 	ImageWidth = req.ImageWidth
 	ImageHeight = req.ImageHeight
-	client, err := rpc.Dial("tcp", req.Address) // probably don't need this
+	client, err := rpc.Dial("tcp", req.Address)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -72,6 +72,8 @@ func publish(req stubs.Request, res *stubs.Response) {
 	CompletedTurns = 0
 }
 
+// constantly checking if the connection between the client and the broken
+// are down, if so break distribute function's main loop
 func checkConnection(channel chan bool) {
 	for {
 		response := new(stubs.StatusReport)
@@ -84,16 +86,18 @@ func checkConnection(channel chan bool) {
 	}
 }
 
+// pause the operation by locking the mutex
 func checkPause(channel chan bool) {
 	for {
 		<-channel
 		Mutex.Lock()
 		<-channel
 		Mutex.Unlock()
-
 	}
 }
 
+// distributing the world and prescribed task (certain slice of the world) to different servers
+// and iterates through the turns given
 func distribute(req stubs.StatusReport, res *stubs.StatusReport) {
 	length := len(GlobalClients)
 	channels := createChannels(length)
@@ -110,11 +114,11 @@ func distribute(req stubs.StatusReport, res *stubs.StatusReport) {
 		}
 		request := stubs.BrokerRequest{Turns: TotalTurns, ImageWidth: ImageWidth, StartY: j * height, EndY: ImageHeight, World: World}
 		go calling(j, request, channels[j])
-		if <-channel {
+		if <-channel { // break the loop if the connection is down
 			break
 		}
 		Mutex.Lock()
-		World = combine(channels, length) // i don't know if this part would work or not, seems problematic to me
+		World = combine(channels, length)
 		CompletedTurns++
 		Mutex.Unlock()
 		fmt.Println(CompletedTurns)
@@ -140,6 +144,8 @@ type Broker struct {
 	World [][]byte
 	Turns int
 }
+
+// broker's rpc call methods
 
 func (b *Broker) Subscribe(req stubs.Subscription, res *stubs.StatusReport) (err error) {
 	subscribe(req, res)
@@ -174,7 +180,6 @@ func (b *Broker) Kill(req stubs.StatusReport, res *stubs.StatusReport) (err erro
 	return
 }
 
-// TODO might have problems with global variables and mutex lock
 func main() {
 	pAddr := flag.String("port", "8030", "port to listen on")
 	flag.Parse()

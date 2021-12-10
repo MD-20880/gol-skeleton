@@ -1,6 +1,6 @@
 package stubs
 
-var GolHandler = "GolOperations.GolWorker" // somehow has to declare like this
+var GolHandler = "GolOperations.GolWorker"
 var KillWorker = "GolOperations.KillWorker"
 var Subscribe = "Broker.Subscribe"
 var Publish = "Broker.Publish"
@@ -10,9 +10,7 @@ var CheckShit = "Distributor.CheckConnection"
 var Pause = "Broker.Pause"
 var Kill = "Broker.Kill"
 
-// Request this is the same as publishRequest
-// yeah, now I don't think its gonna work, it needs that method directly its not like you can
-// pass it around
+// Request that get sent down from the distributor to the broker
 type Request struct {
 	Turns       int
 	ImageWidth  int
@@ -21,6 +19,7 @@ type Request struct {
 	Address     string
 }
 
+// BrokerRequest that are sent to the servers
 type BrokerRequest struct {
 	Turns      int
 	ImageWidth int
@@ -29,17 +28,18 @@ type BrokerRequest struct {
 	World      [][]byte
 }
 
+// Response that are sent back to the distributor
 type Response struct {
 	World [][]byte
 	Turns int
-	// AliveCells []util.Cell
 }
 
 type Subscription struct {
 	Callback      string
-	WorkerAddress string // to be more specific only needs the port
+	WorkerAddress string
 }
 
+// StatusReport placeholder
 type StatusReport struct {
 	Message string
 	Number  int
